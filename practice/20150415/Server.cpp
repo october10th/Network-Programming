@@ -36,8 +36,9 @@ int main(int argc, char **argv) {
 	bind(listenfd, (struct sockaddr *) &servaddr, sizeof(servaddr));
 	listen(listenfd, LISTENQ);
 	maxfd = listenfd; /* initialize */
-	maxi = -1; /* index into client[] array */ for (i = 0; i < FD_SETSIZE; i++)
-	client[i] = -1; /* -1 indicates available entry */
+	maxi = -1; /* index into client[] array */
+	for (i = 0; i < FD_SETSIZE; i++)
+		client[i] = -1; /* -1 indicates available entry */
 	FD_ZERO(&allset); FD_SET(listenfd, &allset);
 	for ( ; ; ) {
 		rset = allset; /* structure assignment */
@@ -50,6 +51,7 @@ int main(int argc, char **argv) {
 					client[i] = connfd; /* save descriptor */
 					break;
 				}
+			
 			if (i == FD_SETSIZE)
 				printf("too many clients");
 
