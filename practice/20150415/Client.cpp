@@ -22,7 +22,7 @@ void str_cli(FILE *fp, int sockfd) {
 	char sendline[MAXLINE], recvline[MAXLINE];
 	stdineof = 0; /*use for test readable*/
 	FD_ZERO(&rset);
-	for ( int i=0; 1;i++ ) {
+	for ( ; ;) {
 		if (stdineof == 0){
 			FD_SET(fileno(fp), &rset);
 			FD_SET(sockfd, &rset);

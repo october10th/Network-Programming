@@ -21,7 +21,7 @@ int main(int argc, char **argv) {
 	int i, maxi, maxfd, listenfd, connfd, sockfd;
 	int nready, client[FD_SETSIZE];
 	ssize_t n;
-	char hell[50]="hello";
+	char hell[50]="hello\r\n";
 	fd_set rset, allset;
 	char line[MAXLINE];
 	socklen_t clilen;
