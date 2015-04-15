@@ -21,7 +21,6 @@ int main(int argc, char **argv) {
 	int i, maxi, maxfd, listenfd, connfd, sockfd;
 	int nready, client[FD_SETSIZE];
 	ssize_t n;
-	char hell[50]="hello\r\n";
 	fd_set rset, allset;
 	char line[MAXLINE];
 	socklen_t clilen;
@@ -51,7 +50,7 @@ int main(int argc, char **argv) {
 					client[i] = connfd; /* save descriptor */
 					break;
 				}
-			
+
 			if (i == FD_SETSIZE)
 				printf("too many clients");
 
@@ -73,9 +72,8 @@ int main(int argc, char **argv) {
 					puts("XD");
 					/* connection closed by client */
 					for(int i=0;i<10;i++){
-						// puts("send Hello");
-						printf("send %s\n", hell);
-						write(sockfd, hell, strlen(hell));
+						puts("send Hello");
+						write(sockfd, "HELLO", 5);
 						sleep(1);
 					}
 					close(sockfd);
