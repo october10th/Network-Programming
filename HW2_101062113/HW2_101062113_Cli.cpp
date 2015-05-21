@@ -38,10 +38,18 @@ void showMsg(){
 	}
 	
 }
+vector<string> recvBuff;
+void dumplines(){
 
+	for(int i=0;i<recvBuff.size();i++){
+		printf("[%d] %s\n", i, recvBuff[i].c_str());
+	}
+
+}
 void dg_cli(FILE *fp, int sockfd, const struct sockaddr *pservaddr, socklen_t servlen) {
 	int n, maxfdp1;
 	fd_set rset;
+	int totalbyte, recvbyte;
 	char sendline[MAXLINE], recvline[MAXLINE + 1];
 	int retVal;
 	vector<string>tok;
@@ -66,6 +74,7 @@ void dg_cli(FILE *fp, int sockfd, const struct sockaddr *pservaddr, socklen_t se
 				
 				sendline[strlen(sendline)-1]='\0';// kill '\n'
 				sendto(sockfd, sendline, strlen(sendline), 0, pservaddr, servlen);
+				recvBuff.clear();
 				WaitingAck=1;
 
 			}
@@ -100,7 +109,36 @@ void dg_cli(FILE *fp, int sockfd, const struct sockaddr *pservaddr, socklen_t se
 								puts("logout success");
 							}
 						}
-						else if(tok[0]=="SA"){
+						//------------------------------------------------
+						else if(tok[0]=="SU"){// show user
+							// if(recvBuff.size()==0){
+							// 	totalbyte=atoi(recvline);
+							// }
+							
+							
+							if(strcmp(recvline, SUCCESS)==0){
+								puts("show users:");
+								dumplines();
+								puts("------end------");
+							}
+							else{
+								recvBuff.push_back(recvline);
+							}
+						}
+						else if(tok[0]=="SA"){// show article
+
+						}
+						else if(tok[0]=="A"){// add article
+
+						}
+						else if(tok[0]=="E"){// enter article
+
+						}
+						//------------------------------------------------
+						else if(tok[0]=="Y"){// yell
+
+						}
+						else if(tok[0]=="T"){// tell
 
 						}
 					}

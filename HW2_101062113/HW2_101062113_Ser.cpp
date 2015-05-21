@@ -113,6 +113,9 @@ int login(Account acc){
 	}
 	return 0;
 }
+void addArticle(){
+
+}
 int main(int argc, char **argv) {
 	system("mkdir Upload");
 	int listenfd, connfd, udpfd, nready, maxfdp1;
@@ -205,7 +208,7 @@ int main(int argc, char **argv) {
 						else{
 							puts("login fail");
 							sendto(udpfd, FAIL, strlen(FAIL), 0, (struct sockaddr *) &cliaddr, len);
-						
+							
 						}
 					}
 				}
@@ -226,7 +229,30 @@ int main(int argc, char **argv) {
 							accountUser.erase(currentUser);
 							sendto(udpfd, SUCCESS, strlen(SUCCESS), 0, (struct sockaddr *) &cliaddr, len);
 						}
+						//------------------------------------------------
+						else if(tok[0]=="SU"){// show user
+							// char sendline[MAXLINE];
+							// sprintf(sendline,"%lu", accountUser.size());
+	    					// sendto(udpfd, sendline, strlen(sendline), 0, (struct sockaddr *) &cliaddr, len);
+							for (std::map<Account, User>::iterator it=accountUser.begin(); it!=accountUser.end(); ++it){
+	    						sendto(udpfd, (it->first).ID.c_str(), (it->first).ID.length(), 0, (struct sockaddr *) &cliaddr, len);
+	    					}
+	    					sendto(udpfd, SUCCESS, strlen(SUCCESS), 0, (struct sockaddr *) &cliaddr, len);
+						}
 						else if(tok[0]=="SA"){// show article
+
+						}
+						else if(tok[0]=="A"){// add article
+
+						}
+						else if(tok[0]=="E"){// enter article
+
+						}
+						//------------------------------------------------
+						else if(tok[0]=="Y"){// yell
+
+						}
+						else if(tok[0]=="T"){// tell
 
 						}
 					
@@ -236,7 +262,7 @@ int main(int argc, char **argv) {
 					}
 				}
 				// send back (debug	
-				sendto(udpfd, mesg, n, 0, (struct sockaddr *) &cliaddr, len);
+				// sendto(udpfd, mesg, n, 0, (struct sockaddr *) &cliaddr, len);
 			}
 			
 		}
