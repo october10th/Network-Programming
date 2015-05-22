@@ -94,7 +94,7 @@ void init(){
 }
 
 void insertUser(Account acc){
-	string sql="INSERT INTO user VALUES('"+acc.ID+"', '"+acc.pw+"');";
+	string sql="INSERT INTO user (ID, pw) VALUES('"+acc.ID+"', '"+acc.pw+"');";
 	sql_exec(sql);
 	showResult();
 }
@@ -122,7 +122,7 @@ int addArticle(string ID, string title, string content){
 	sql_exec(sql);
 	showResult();
 	if(result[0][string("MAX(aid)")]!="NULL")aid=1+atoi(result[0][string("MAX(aid)")].c_str());
-	sql="INSERT INTO article VALUES('"+toString(aid)+"', '"+ID+"', '"+title+"', '"+content+"');";
+	sql="INSERT INTO article (aid,author,title,content) VALUES('"+toString(aid)+"', '"+ID+"', '"+title+"', '"+content+"');";
 	cout<<sql<<endl;
 	sql_exec(sql);
 	showResult();
@@ -130,7 +130,7 @@ int addArticle(string ID, string title, string content){
 	return aid;
 }
 void showArticle(){
-	string sql="SELECT * FROM article;";
+	string sql="SELECT aid,author,title,hit FROM article;";
 	cout<<sql<<endl;
 	sql_exec(sql);
 	showResult();
@@ -260,8 +260,19 @@ int main(int argc, char **argv) {
 						else if(tok[0]=="SA"){// show article
 							puts("show article");
 							showArticle();
+							cout<<"result size: "<<result.size()<<endl;
 							sendto(udpfd, SUCCESS, strlen(SUCCESS), 0, (struct sockaddr *) &cliaddr, len);
 							// send all article aid title author
+							
+							string str=toString(result.size());
+							sendto(udpfd, str.c_str(), str.length(), 0, (struct sockaddr *) &cliaddr, len);
+							for(int i=0;i<result.size();i++){
+								for (std::map<string, string>::iterator it=result[i].begin(); it!=result[i].end(); ++it){
+									str=it->first+" : "+it->second;
+		    						sendto(udpfd, str.c_str(), str.length(), 0, (struct sockaddr *) &cliaddr, len);
+		    					}
+							}
+
 						}
 						else if(tok[0]=="A"){// add article
 							puts("add article");
