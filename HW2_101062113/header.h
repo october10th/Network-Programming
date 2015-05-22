@@ -58,11 +58,12 @@ struct Account{
 	string ID, pw;
 	int state;
 	Account(){state=0;}
+	Account(string _username){ID=_username;}
 	Account(string _username, string _pw){ID=_username, pw=_pw;state=0;}
 	Account(const char * _username, const char * _pw){ID=_username, pw=_pw;state=0;}
 	bool operator<(const Account &xd)const{
-		if(strcmp(ID.c_str(), xd.ID.c_str())==0)
-			return strcmp(pw.c_str(), xd.pw.c_str())<0;
+		// if(strcmp(ID.c_str(), xd.ID.c_str())==0)
+		// 	return strcmp(pw.c_str(), xd.pw.c_str())<0;
 		return strcmp(ID.c_str(), xd.ID.c_str())<0;
 
 	}
@@ -74,7 +75,7 @@ const char SUCCESS[]="Success!";
 const char FAIL[]="Fail!";
 const char create_sql[6][512]={
 	"CREATE TABLE user(ID VARCHAR(64) PRIMARY KEY, pw VARCHAR(64));",
-	"CREATE TABLE article( aid INTEGER PRIMARY KEY, title VARCHAR(64), content VARCHAR(1024), hit INTEGER DEFAULT 0 ) ;",
+	"CREATE TABLE article( aid INTEGER PRIMARY KEY, author VARCHAR(64), title VARCHAR(64), content VARCHAR(1024), hit INTEGER DEFAULT 0 ) ;",
 	"CREATE TABLE response( rid INTEGER PRIMARY KEY, aid INTEGER , content VARCHAR(1024)) ;",
 	"CREATE TABLE blacklist( ID VARCHAR(64) PRIMARY KEY, aid INTEGER) ;",
 	"CREATE TABLE filelist( fid INTEGER PRIMARY KEY, path VARCHAR(1024), aid INTEGER, rid INTEGER) ;"
@@ -88,4 +89,9 @@ vector<string>parse(string str){
         // cout<<item<<endl;
     }
     return elems;
+}
+string toString(int a){
+	char str[50];
+	sprintf(str, "%d", a);
+	return string(str);
 }

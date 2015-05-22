@@ -22,9 +22,11 @@ int callback(void *data, int argc, char **argv, char **azColName){
 	fprintf(stderr, "%s: ", (const char*)data);
 	for(i=0; i<argc; i++){
 		printf("%s = %s\n", azColName[i], argv[i] ? argv[i] : "NULL");
-		m[azColName[i]]=argv[i];
+		m[azColName[i]]=argv[i] ? argv[i] : "NULL";
+		
 	}
 	printf("\n");
+
 	result.push_back(m);
 	return 0;
 }
@@ -113,8 +115,25 @@ int login(Account acc){
 	}
 	return 0;
 }
-void addArticle(){
-
+int addArticle(string ID, string title, string content){
+	string sql="SELECT MAX(aid) FROM article;";
+	int aid=0;
+	cout<<sql<<endl;
+	sql_exec(sql);
+	showResult();
+	if(result[0][string("MAX(aid)")]!="NULL")aid=1+atoi(result[0][string("MAX(aid)")].c_str());
+	sql="INSERT INTO article VALUES('"+toString(aid)+"', '"+ID+"', '"+title+"', '"+content+"');";
+	cout<<sql<<endl;
+	sql_exec(sql);
+	showResult();
+	printf("aid = %d\n", aid);
+	return aid;
+}
+void showArticle(){
+	string sql="SELECT * FROM article;";
+	cout<<sql<<endl;
+	sql_exec(sql);
+	showResult();
 }
 int main(int argc, char **argv) {
 	system("mkdir Upload");
@@ -173,8 +192,10 @@ int main(int argc, char **argv) {
 				printf("from UDP:[%s]\n", mesg);
 
 				usleep(500);
+				// ACK
 				puts("send back ACK");
 				sendto(udpfd, ACK, strlen(ACK), 0, (struct sockaddr *) &cliaddr, len);
+				// get token
 				tok.clear();
 				tok=parse(mesg);
 				if(userAccount.find(User(getIP(cliaddr), getPort(cliaddr), cliaddr))==userAccount.end()){
@@ -231,18 +252,25 @@ int main(int argc, char **argv) {
 						}
 						//------------------------------------------------
 						else if(tok[0]=="SU"){// show user
-							// char sendline[MAXLINE];
-							// sprintf(sendline,"%lu", accountUser.size());
-	    					// sendto(udpfd, sendline, strlen(sendline), 0, (struct sockaddr *) &cliaddr, len);
 							for (std::map<Account, User>::iterator it=accountUser.begin(); it!=accountUser.end(); ++it){
 	    						sendto(udpfd, (it->first).ID.c_str(), (it->first).ID.length(), 0, (struct sockaddr *) &cliaddr, len);
 	    					}
 	    					sendto(udpfd, SUCCESS, strlen(SUCCESS), 0, (struct sockaddr *) &cliaddr, len);
 						}
 						else if(tok[0]=="SA"){// show article
-
+							puts("show article");
+							showArticle();
+							sendto(udpfd, SUCCESS, strlen(SUCCESS), 0, (struct sockaddr *) &cliaddr, len);
+							// send all article aid title author
 						}
 						else if(tok[0]=="A"){// add article
+							puts("add article");
+							addArticle(currentUser.ID, tok[1], tok[2]);
+							sendto(udpfd, SUCCESS, strlen(SUCCESS), 0, (struct sockaddr *) &cliaddr, len);
+							// receiving files
+							// puts("receiving files");
+							// FD_SET(listenfd, &rset);
+							// FD_SET(udpfd, &rset);
 
 						}
 						else if(tok[0]=="E"){// enter article
@@ -250,10 +278,14 @@ int main(int argc, char **argv) {
 						}
 						//------------------------------------------------
 						else if(tok[0]=="Y"){// yell
-
+							for (std::map<Account, User>::iterator it=accountUser.begin(); it!=accountUser.end(); ++it){
+	    						sendto(udpfd, tok[1].c_str(), tok[1].length(), 0, (struct sockaddr *) &(it->second.cliaddr), sizeof(it->second.cliaddr));
+	    					}
 						}
 						else if(tok[0]=="T"){// tell
-
+							User usr=accountUser[Account(tok[1])];
+							sendto(udpfd, tok[2].c_str(), tok[2].length(), 0, (struct sockaddr *) &usr.cliaddr, sizeof(usr.cliaddr));
+	    					
 						}
 					
 					}
