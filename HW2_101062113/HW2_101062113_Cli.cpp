@@ -159,6 +159,7 @@ void receiveArticle(FILE *fp, int sockfd, const struct sockaddr *pservaddr, sock
 		totalbytes=atoi(recvline);
 		if(totalbytes==0){
 			puts("(black list)permission denied!");
+			return;
 		}
 		else{
 			me.state=Article;
@@ -172,15 +173,22 @@ void receiveArticle(FILE *fp, int sockfd, const struct sockaddr *pservaddr, sock
 				recvline[n] = 0;
 				totallines=atoi(recvline);
 			}
+			int findAuthor=0;
 			for(int j=0;j<totallines;j++){
 				if((n = recvfrom(sockfd, recvline, MAXLINE, 0, NULL, NULL))<0){
 					puts("n<0");
 				}
 				else{
 					recvline[n] = 0; /* null terminate */
-					if(j%2==0 && totallines>1)printf("%s:", recvline);
+					if(j%2==0 && totallines>1){
+						printf("%s:", recvline);
+						if(strcmp(recvline, "author")==0){
+							findAuthor=1;
+						}
+					}
 					else puts(recvline);
-					if(j==3&&strcmp(recvline, me.ID.c_str())==0){
+
+					if(findAuthor&&strcmp(recvline, me.ID.c_str())==0){
 						isCurrentAuthor=1;
 					}
 
@@ -306,7 +314,7 @@ void dg_cli(FILE *fp, int sockfd, const struct sockaddr *pservaddr, socklen_t se
 							me.state=Normal;
 							me.ID=tok[1],me.pw=tok[2];
 						}
-						puts(recvline);
+						// puts(recvline);
 					}
 					else if(me.state==Normal){
 						if(tok[0]=="Del"){// delete account
@@ -327,9 +335,12 @@ void dg_cli(FILE *fp, int sockfd, const struct sockaddr *pservaddr, socklen_t se
 								puts("show users:");
 								dumplines();
 								puts("------end------");
+								recvline[0]='\0';
 							}
 							else{
 								recvBuff.push_back(recvline);
+
+								recvline[0]='\0';
 							}
 						}
 						else if(tok[0]=="SA"){// show article
@@ -353,6 +364,7 @@ void dg_cli(FILE *fp, int sockfd, const struct sockaddr *pservaddr, socklen_t se
 										}
 										puts("");
 									}
+									recvline[0]='\0';
 								}
 							}
 						}
@@ -386,32 +398,32 @@ void dg_cli(FILE *fp, int sockfd, const struct sockaddr *pservaddr, socklen_t se
 						//------------------------------------------------
 						else if(tok[0]=="Y"){// yell
 							// do nothing ( maybe puts
-							puts(recvline);
+							// puts(recvline);
 						}
 						else if(tok[0]=="T"){// tell
 							// do nothing ( maybe puts
-							puts(recvline);
+							// puts(recvline);
 						}
 					}
 					else if(me.state==Article){
 						if(tok[0]=="R"){// response
 
 							if(strcmp(recvline, SUCCESS)==0){
-								puts(recvline);
+								// puts(recvline);
 								receiveArticle(fp, sockfd, pservaddr, servlen);
 							}
 
 						}
 						else if(tok[0]=="D"){// download
 							if(strcmp(recvline, SUCCESS)==0){
-								puts(recvline);
+								// puts(recvline);
 								downloadFile(tok[1], fp, sockfd, pservaddr, servlen);
 								receiveArticle(fp, sockfd, pservaddr, servlen);
 							}
 						}
 						else if(tok[0]=="U"){// upload
 							if(strcmp(recvline, SUCCESS)==0){
-								puts(recvline);
+								// puts(recvline);
 								// send total bytes (ack)
 								totalbytes=getTotalbytes(tok[1]);
 								sprintf(sendline, "%d", totalbytes);
@@ -426,17 +438,17 @@ void dg_cli(FILE *fp, int sockfd, const struct sockaddr *pservaddr, socklen_t se
 						}
 						else if(tok[0]=="Add"){// add black list
 							if(strcmp(recvline, SUCCESS)==0){
-								puts(recvline);
+								// puts(recvline);
 							}
 						}
 						else if(tok[0]=="Del"){// delete black list
 							if(strcmp(recvline, SUCCESS)==0){
-								puts(recvline);
+								// puts(recvline);
 							}
 						}
 						else if(tok[0]=="DELETE"){// delete article
 							if(strcmp(recvline, SUCCESS)==0){
-								puts(recvline);
+								// puts(recvline);
 								puts("if you didn't delete success you will still be sent to the prev page");
 								isCurrentAuthor=0;
 								me.state=Normal;
@@ -445,14 +457,14 @@ void dg_cli(FILE *fp, int sockfd, const struct sockaddr *pservaddr, socklen_t se
 						}
 						else if(tok[0]=="Ret"){// return
 							if(strcmp(recvline, SUCCESS)==0){
-								puts(recvline);
+								// puts(recvline);
 								isCurrentAuthor=0;
 								me.state=Normal;
 
 							}
 						}
 					}
-					// puts(recvline);
+					puts(recvline);
 					//client doesn't have to ack
 					showMsg();
 				}

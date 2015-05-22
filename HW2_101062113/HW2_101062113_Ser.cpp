@@ -225,6 +225,20 @@ void deleteBlacklist(string ID, int aid){
 	sql_exec(sql);
 	showResult();
 }
+void deleteBlacklistAll(int aid){
+	string sql="DELETE FROM blacklist WHERE aid='"+toString(aid)+"';";
+	cout<<sql<<endl;
+	sql_exec(sql);
+	showResult();
+}
+
+int isAuthor(string ID, int aid){
+	string sql="SELECT * FROM article WHERE author='"+ID+"' AND aid='"+toString(aid)+"';";
+	cout<<sql<<endl;
+	sql_exec(sql);
+	showResult();
+	return (int)result.size();
+}
 void sendResult(){
 	string str=toString(result.size());
 	sendto(udpfd, str.c_str(), str.length(), 0, (struct sockaddr *) &cliaddr, len);
@@ -254,6 +268,12 @@ int addFile(string ID, int aid, string path, string IP, int port){
 }
 void enterFile(int aid){
 	string sql="SELECT * FROM filelist WHERE aid='"+toString(aid)+"' ;";
+	cout<<sql<<endl;
+	sql_exec(sql);
+	showResult();
+}
+void deleteFile(int aid){
+	string sql="DELETE FROM filelist WHERE aid='"+toString(aid)+"';";
 	cout<<sql<<endl;
 	sql_exec(sql);
 	showResult();
@@ -536,16 +556,23 @@ int main(int argc, char **argv) {
 							
 						}
 						else if(tok[0]=="DELETE"){// delete article
-							// article
-							deleteArticle(currentUser.ID, currentUser.currentAid);
-							// response
-							deleteResponse(currentUser.currentAid);
-							// files
-							currentUser.currentAid=-1;
-							currentUser.state=Normal;
-							userAccount[User(getIP(cliaddr), getPort(cliaddr), cliaddr)]=currentUser;
-							puts("delete article");
-							sendto(udpfd, SUCCESS, strlen(SUCCESS), 0, (struct sockaddr *) &cliaddr, len);
+							if(isAuthor(currentUser.ID, currentUser.currentAid)){
+								// article
+								deleteArticle(currentUser.ID, currentUser.currentAid);
+								// response
+								deleteResponse(currentUser.currentAid);
+								// files
+								deleteFile(currentUser.currentAid);
+								// black all
+								deleteBlacklistAll(currentUser.currentAid);
+								
+								currentUser.currentAid=-1;
+								currentUser.state=Normal;
+								userAccount[User(getIP(cliaddr), getPort(cliaddr), cliaddr)]=currentUser;
+								puts("delete article");
+								sendto(udpfd, SUCCESS, strlen(SUCCESS), 0, (struct sockaddr *) &cliaddr, len);	
+							}
+							
 							
 						}
 						else if(tok[0]=="Ret"){// return
@@ -555,6 +582,7 @@ int main(int argc, char **argv) {
 							sendto(udpfd, SUCCESS, strlen(SUCCESS), 0, (struct sockaddr *) &cliaddr, len);
 							
 						}
+						
 					}
 				}
 				// send back (debug	
