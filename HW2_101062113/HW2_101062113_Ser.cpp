@@ -1,7 +1,7 @@
 #include "header.h"
 #include <sqlite3.h>
 int listenfd, connfd, udpfd, nready, maxfdp1;
-char mesg[MAXLINE];
+char mesg[MAXLINE], sendline[MAXLINE];
 pid_t childpid;
 int SERV_PORT=7122;
 fd_set rset;
@@ -16,7 +16,7 @@ map<User, Account>userAccount;
 map<Account, User>accountUser;
 sqlite3 *db;
 vector< map < string, string > >result;
-int WaitingAck;
+int totalbytes, sendbytes;
 
 void sig_chld(int signo){
 	pid_t pid;
@@ -106,10 +106,19 @@ void init(){
 
 }
 
-void insertUser(Account acc){
-	string sql="INSERT INTO user (ID, pw) VALUES('"+acc.ID+"', '"+acc.pw+"');";
+int insertUser(Account acc){
+	string sql="SELECT * FROM user WHERE ID='"+acc.ID+"';";
+	cout<<sql<<endl;
+	sql_exec(sql);
+	if(result.size()){
+		showResult();
+		return 0;
+	}
+	sql="INSERT INTO user (ID, pw) VALUES('"+acc.ID+"', '"+acc.pw+"');";
 	sql_exec(sql);
 	showResult();
+
+	return 1;
 }
 void deleteUser(Account acc){
 	string sql="DELETE FROM user WHERE ID='"+acc.ID+"' AND pw='"+acc.pw+"';";
@@ -124,7 +133,6 @@ int login(Account acc){
 	if(result.size()){
 		showResult();
 		return 1;
-
 	}
 	return 0;
 }
@@ -250,7 +258,66 @@ void enterFile(int aid){
 	sql_exec(sql);
 	showResult();
 }
+int getTotalbytes(string filename){
+	FILE *fin=fopen(filename.c_str(), "rb");
+	int totalbytes=0;
+	int sendbytes;
+	while (!feof(fin)) {
+		
+        sendbytes=fread(sendline, sizeof(char), sizeof(sendline), fin);
+        totalbytes+=sendbytes;
+    }
+    printf("totalbytes = %d\n", totalbytes);
+	fclose(fin);
+	return totalbytes;
+}
+void receiveFile(string filename){
+	if((n = recvfrom(udpfd, mesg, MAXLINE, 0, (struct sockaddr *) &cliaddr, &len))<0){
+		printf("UDP connected from %d (%s)\n", getPort(cliaddr), getIP(cliaddr));
+		puts("n<0");	
+	}
+	else{
+		printf("UDP connected from %d (%s)\n", getPort(cliaddr), getIP(cliaddr));
+		mesg[n]=0;
+		printf("from UDP:[%s]\n", mesg);
+		totalbytes=atoi(mesg);
+		puts("send back ACK");
+		sendto(udpfd, ACK, strlen(ACK), 0, (struct sockaddr *) &cliaddr, len);
+		int recvbytes=0;
+		FILE *fout=fopen(filename.c_str(), "wb");
+		while(recvbytes<totalbytes){
 
+			if((n = recvfrom(udpfd, mesg, MAXLINE, 0, (struct sockaddr *) &cliaddr, &len))<0){
+				// printf("UDP connected from %d (%s)\n", getPort(cliaddr), getIP(cliaddr));
+				puts("n<0");	
+			}
+			else{
+				// printf("UDP connected from %d (%s)\n", getPort(cliaddr), getIP(cliaddr));
+				
+				sendto(udpfd, ACK, strlen(ACK), 0, (struct sockaddr *) &cliaddr, len);
+				mesg[n]=0;
+				fwrite(mesg, sizeof(char), n, fout);
+				recvbytes+=n;
+				printf("recvbytes = %d (%lu)\n", recvbytes, n);
+			}
+		}
+		fclose(fout);
+	}
+}
+void sendFile(string filename){
+	int tot=0;
+	FILE *fin=fopen(filename.c_str(), "rb");
+	totalbytes=getTotalbytes(filename);
+	printf("start sending %d bytes\n", totalbytes);
+	sprintf(sendline, "%d", totalbytes);
+    sendto(udpfd, sendline, strlen(sendline), 0, (struct sockaddr *) &cliaddr, len);
+	while (!feof(fin)) {
+        sendbytes=fread(sendline, sizeof(char), sizeof(sendline), fin);
+        sendto(udpfd, sendline, sendbytes, 0, (struct sockaddr *) &cliaddr, len);
+        printf("sendbytes=%d (%d)\n", sendbytes, tot+=sendbytes);
+    }
+    fclose(fin);
+}
 void sendArticle(){
 	// article
 	enterArticle(currentUser.currentAid);
@@ -265,9 +332,10 @@ void sendArticle(){
 	sendResult();
 }
 int main(int argc, char **argv) {
-	system("mkdir Upload");
 	
 	init();
+	system("mkdir Upload");
+	chdir("Upload");
 	userAccount.clear();
 	accountUser.clear();
 	if(argc>1)SERV_PORT=atoi(argv[1]);
@@ -286,7 +354,7 @@ int main(int argc, char **argv) {
 	servaddr.sin_port = htons(SERV_PORT);
 	bind(udpfd, (struct sockaddr *) &servaddr, sizeof(servaddr));
 	signal(SIGCHLD, sig_chld);/* must call waitpid() */
-	WaitingAck=0;
+
 	FD_ZERO(&rset);
 	maxfdp1 = max(listenfd, udpfd) + 1;
 	for ( ; ; ) {
@@ -329,10 +397,14 @@ int main(int argc, char **argv) {
 						currentUser.currentAid=-1;
 						userAccount[User(getIP(cliaddr), getPort(cliaddr), cliaddr)]=currentUser;
 						accountUser[currentUser]=User(getIP(cliaddr), getPort(cliaddr), cliaddr);
-						insertUser(currentUser);
-						puts("register sucess");
-						sendto(udpfd, SUCCESS, strlen(SUCCESS), 0, (struct sockaddr *) &cliaddr, len);
-						
+						if(insertUser(currentUser)){
+							puts("register sucess");
+							sendto(udpfd, SUCCESS, strlen(SUCCESS), 0, (struct sockaddr *) &cliaddr, len);
+						}
+						else{
+							puts("register fail");
+							sendto(udpfd, FAIL, strlen(FAIL), 0, (struct sockaddr *) &cliaddr, len);
+						}
 					}
 					else if(tok[0][0]=='L'){
 						if(login(Account(tok[1], tok[2]))){
@@ -420,8 +492,6 @@ int main(int argc, char **argv) {
 								userAccount[User(getIP(cliaddr), getPort(cliaddr), cliaddr)]=currentUser;
 								sendArticle();
 							}
-							
-
 						}
 						//------------------------------------------------
 						else if(tok[0]=="Y"){// yell
@@ -443,17 +513,21 @@ int main(int argc, char **argv) {
 							sendArticle();
 						}
 						else if(tok[0]=="D"){// download
-
+							sendto(udpfd, SUCCESS, strlen(SUCCESS), 0, (struct sockaddr *) &cliaddr, len);
+							sendFile(tok[1]);
+							sendArticle();
 						}
 						else if(tok[0]=="U"){// upload
-
+							sendto(udpfd, SUCCESS, strlen(SUCCESS), 0, (struct sockaddr *) &cliaddr, len);
+							
+							addFile(currentUser.ID, currentUser.currentAid, tok[1], getIP(cliaddr), getPort(cliaddr));
+							receiveFile(tok[1]);
+							sendArticle();
 						}
 						else if(tok[0]=="Add"){// add black list
 							addBlacklist(tok[1], currentUser.currentAid);
 							puts("add black list");
 							sendto(udpfd, SUCCESS, strlen(SUCCESS), 0, (struct sockaddr *) &cliaddr, len);
-							
-
 						}
 						else if(tok[0]=="Del"){// delete black list
 							deleteBlacklist(tok[1], currentUser.currentAid);

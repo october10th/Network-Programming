@@ -5,10 +5,10 @@ struct timeval timeout;
 int WaitingAck;
 Account me;
 int isCurrentAuthor;// current author
-char sendline[MAXLINE], recvline[MAXLINE + 1];
+char sendline[MAXLINE], recvline[MAXLINE + 1], buf[MAXLINE];
 int retVal;
 int n, maxfdp1;
-int totalbytes, totallines, recvbytes;
+int totalbytes, totallines, recvbytes, sendbytes;
 fd_set rset;
 vector<string>tok;
 vector<string> recvBuff, sendBuff;
@@ -44,6 +44,8 @@ void showMsg(){
 		if(isCurrentAuthor)// current author is me
 			puts("[Add]/[Del] black list [User ID]");// only author
 		puts("[D]ownload/[U]pload [File name]");
+		puts("(you have to put the file in current directory Download)");
+		puts("(and the result will be in Upload)");
 		
 	}
 	
@@ -105,7 +107,7 @@ void waitingAck(FILE *fp, int sockfd, const struct sockaddr *pservaddr, socklen_
 		if(retVal==0){// 0 => timeout
 			// resend
 			puts("resend");
-			sendto(sockfd, sendline, strlen(sendline), 0, pservaddr, servlen);
+			sendto(sockfd, sendline, sendbytes, 0, pservaddr, servlen);
 			
 		}
 	}
@@ -146,6 +148,7 @@ void showResult(FILE *fp, int sockfd, const struct sockaddr *pservaddr, socklen_
 		}
 	}
 }
+
 void receiveArticle(FILE *fp, int sockfd, const struct sockaddr *pservaddr, socklen_t servlen){
 	// article
 	if((n = recvfrom(sockfd, recvline, MAXLINE, 0, NULL, NULL))<0){
@@ -189,13 +192,74 @@ void receiveArticle(FILE *fp, int sockfd, const struct sockaddr *pservaddr, sock
 	
 
 	// response
-	puts("reponse: ");
+	puts("----------reponse: ----------");
 	showResult(fp, sockfd, pservaddr, servlen);
 	// file
-	puts("file: ");
+	puts("----------file: ----------");
 	showResult(fp, sockfd, pservaddr, servlen);
 }
+int getTotalbytes(string filename){
+	FILE *fin=fopen(filename.c_str(), "rb");
+	int totalbytes=0;
+	int sendbytes;
+	while (!feof(fin)) {
+		
+        sendbytes=fread(buf, sizeof(char), sizeof(buf), fin);
+        totalbytes+=sendbytes;
+    }
+    printf("totalbytes = %d\n", totalbytes);
+	fclose(fin);
+	return totalbytes;
+}
+void sendFile(string filename, FILE *fp, int sockfd, const struct sockaddr *pservaddr, socklen_t servlen){
+	int tot=0;
+	FILE *fin=fopen(filename.c_str(), "rb");
+	totalbytes=getTotalbytes(filename);
+	sprintf(sendline, "%d", totalbytes);
+	sendto(sockfd, sendline, strlen(sendline), 0, pservaddr, servlen);
+	while (!feof(fin)) {
+		
+        sendbytes=fread(sendline, sizeof(char), sizeof(sendline), fin);
+        sendto(sockfd, sendline, sendbytes, 0, pservaddr, servlen);
+        printf("sendbytes=%d (%d)\n", sendbytes, tot+=sendbytes);
+        WaitingAck=1;
+        waitingAck(fp, sockfd, pservaddr, servlen);
+    }
+    fclose(fin);
 
+}
+void downloadFile(string filename, FILE *fp, int sockfd, const struct sockaddr *pservaddr, socklen_t servlen){
+	FILE *fout=fopen(filename.c_str(), "wb");
+	if((n = recvfrom(sockfd, recvline, MAXLINE, 0, NULL, NULL))<0){
+		puts("n<0");
+	}
+	else{
+		recvline[n] = 0; /* null terminate */
+		totalbytes=atoi(recvline);
+		printf("start download (%d bytes)\n", totalbytes);
+		if(totalbytes==0){
+			puts("NO file");
+			return ;
+		}
+		int recvbytes=0;
+		while(recvbytes<totalbytes){
+			
+			if((n = recvfrom(sockfd, recvline, MAXLINE, 0, NULL, NULL))<0){
+				puts("n<0");
+			}
+			else{
+				recvline[n] = 0; /* null terminate */
+				fwrite(recvline, sizeof(char), n, fout);
+				printf("download %d (%d) bytes\n", recvbytes+=n, totalbytes);
+				
+			}
+		}
+		puts("download fin");
+		
+	}
+	fclose(fout);
+	
+}
 void dg_cli(FILE *fp, int sockfd, const struct sockaddr *pservaddr, socklen_t servlen) {
 	
 	
@@ -238,11 +302,11 @@ void dg_cli(FILE *fp, int sockfd, const struct sockaddr *pservaddr, socklen_t se
 					tok.clear();
 					tok=parse(sendline);
 					if(me.state==Init){
-						if(strcmp(recvline, SUCCESS)==0){
+						if(strcmp(recvline, SUCCESS)==0){// register or login success
 							me.state=Normal;
 							me.ID=tok[1],me.pw=tok[2];
 						}
-						showMsg();
+						puts(recvline);
 					}
 					else if(me.state==Normal){
 						if(tok[0]=="Del"){// delete account
@@ -316,10 +380,7 @@ void dg_cli(FILE *fp, int sockfd, const struct sockaddr *pservaddr, socklen_t se
 							puts("enter article");
 							isCurrentAuthor=0;
 							if(strcmp(recvline, SUCCESS)==0){
-								
 								receiveArticle(fp, sockfd, pservaddr, servlen);
-
-								
 							}
 						}
 						//------------------------------------------------
@@ -339,12 +400,29 @@ void dg_cli(FILE *fp, int sockfd, const struct sockaddr *pservaddr, socklen_t se
 								puts(recvline);
 								receiveArticle(fp, sockfd, pservaddr, servlen);
 							}
+
 						}
 						else if(tok[0]=="D"){// download
-							
+							if(strcmp(recvline, SUCCESS)==0){
+								puts(recvline);
+								downloadFile(tok[1], fp, sockfd, pservaddr, servlen);
+								receiveArticle(fp, sockfd, pservaddr, servlen);
+							}
 						}
 						else if(tok[0]=="U"){// upload
-
+							if(strcmp(recvline, SUCCESS)==0){
+								puts(recvline);
+								// send total bytes (ack)
+								totalbytes=getTotalbytes(tok[1]);
+								sprintf(sendline, "%d", totalbytes);
+								sendto(sockfd, sendline, strlen(sendline), 0, pservaddr, servlen);
+								WaitingAck=1;
+								sendbytes=strlen(sendline);
+								waitingAck(fp, sockfd, pservaddr, servlen);
+								// send file ( still ack )
+								sendFile(tok[1], fp, sockfd, pservaddr, servlen);
+								receiveArticle(fp, sockfd, pservaddr, servlen);
+							}
 						}
 						else if(tok[0]=="Add"){// add black list
 							if(strcmp(recvline, SUCCESS)==0){
@@ -362,7 +440,6 @@ void dg_cli(FILE *fp, int sockfd, const struct sockaddr *pservaddr, socklen_t se
 								puts("if you didn't delete success you will still be sent to the prev page");
 								isCurrentAuthor=0;
 								me.state=Normal;
-
 							}
 
 						}
@@ -388,6 +465,7 @@ void dg_cli(FILE *fp, int sockfd, const struct sockaddr *pservaddr, socklen_t se
 			
 		}
 		else{
+			sendbytes=strlen(sendline);
 			waitingAck(fp, sockfd, pservaddr, servlen);
 		}
 		// printf("retVal = %d\n", retVal);
@@ -398,6 +476,7 @@ int main(int argc, char **argv) {
 	int sockfd;
 	struct sockaddr_in servaddr;
 	system("mkdir Download");
+	chdir("Download");
 	if (argc < 2){
 		puts("usage: udpcli <IPaddress> <port>");
 	}
