@@ -244,6 +244,7 @@ void sendFile(string filename, FILE *fp, int sockfd, const struct sockaddr *pser
 }
 void downloadFile(string filename, FILE *fp, int sockfd, const struct sockaddr *pservaddr, socklen_t servlen){
 	FILE *fout=fopen(filename.c_str(), "wb");
+	int recvbytes=0;
 	if((n = recvfrom(sockfd, recvline, MAXLINE, 0, NULL, NULL))<0){
 		puts("n<0");
 	}
@@ -255,7 +256,7 @@ void downloadFile(string filename, FILE *fp, int sockfd, const struct sockaddr *
 			puts("NO file");
 			return ;
 		}
-		int recvbytes=0;
+		
 		while(recvbytes<totalbytes){
 			
 			if((n = recvfrom(sockfd, recvline, MAXLINE, 0, NULL, NULL))<0){
@@ -288,7 +289,7 @@ void dg_cli(FILE *fp, int sockfd, const struct sockaddr *pservaddr, socklen_t se
 	
 	
 	timeout.tv_sec=0;
-	timeout.tv_usec=5000;
+	timeout.tv_usec=100000;
 	FD_ZERO(&rset); /*initial select*/
 	me.state=Init;
 	showMsg();// Login or Register

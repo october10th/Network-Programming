@@ -299,6 +299,7 @@ int getTotalbytes(string filename){
 }
 
 void receiveFile(string filename){
+	int recvbytes=0;
 	if((n = recvfrom(udpfd, mesg, MAXLINE, 0, (struct sockaddr *) &cliaddr, &len))<0){
 		printf("UDP connected from %d (%s)\n", getPort(cliaddr), getIP(cliaddr));
 		puts("n<0");	
@@ -310,7 +311,7 @@ void receiveFile(string filename){
 		totalbytes=atoi(mesg);
 		puts("send back ACK");
 		sendto(udpfd, ACK, strlen(ACK), 0, (struct sockaddr *) &cliaddr, len);
-		int recvbytes=0;
+		
 		FILE *fout=fopen(filename.c_str(), "wb");
 		while(recvbytes<totalbytes){
 
@@ -330,7 +331,7 @@ void receiveFile(string filename){
 		}
 		if(recvbytes!=totalbytes){
 			string str="rm "+filename;
-			// system(str.c_str());deleteFile(filename);
+			system(str.c_str());deleteFile(filename);
 			printf("recvbytes %d totalbytes %d\n", recvbytes, totalbytes);
 			puts("packet loss delete file");
 		}
