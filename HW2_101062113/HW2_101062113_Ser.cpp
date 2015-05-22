@@ -278,6 +278,12 @@ void deleteFile(int aid){
 	sql_exec(sql);
 	showResult();
 }
+void deleteFile(string filename){
+	string sql="DELETE FROM filelist WHERE path='"+filename+"';";
+	cout<<sql<<endl;
+	sql_exec(sql);
+	showResult();
+}
 int getTotalbytes(string filename){
 	FILE *fin=fopen(filename.c_str(), "rb");
 	int totalbytes=0;
@@ -291,6 +297,7 @@ int getTotalbytes(string filename){
 	fclose(fin);
 	return totalbytes;
 }
+
 void receiveFile(string filename){
 	if((n = recvfrom(udpfd, mesg, MAXLINE, 0, (struct sockaddr *) &cliaddr, &len))<0){
 		printf("UDP connected from %d (%s)\n", getPort(cliaddr), getIP(cliaddr));
@@ -317,9 +324,18 @@ void receiveFile(string filename){
 				sendto(udpfd, ACK, strlen(ACK), 0, (struct sockaddr *) &cliaddr, len);
 				mesg[n]=0;
 				fwrite(mesg, sizeof(char), n, fout);
-				recvbytes+=n;
-				printf("recvbytes = %d (%lu)\n", recvbytes, n);
+
+				printf("recvbytes = %d (%lu)\n", recvbytes+=n, n);
 			}
+		}
+		if(recvbytes!=totalbytes){
+			string str="rm "+filename;
+			// system(str.c_str());deleteFile(filename);
+			printf("recvbytes %d totalbytes %d\n", recvbytes, totalbytes);
+			puts("packet loss delete file");
+		}
+		else{
+			puts("no packet loss");
 		}
 		fclose(fout);
 	}
@@ -336,6 +352,7 @@ void sendFile(string filename){
         sendto(udpfd, sendline, sendbytes, 0, (struct sockaddr *) &cliaddr, len);
         printf("sendbytes=%d (%d)\n", sendbytes, tot+=sendbytes);
     }
+
     fclose(fin);
 }
 void sendArticle(){
@@ -582,7 +599,7 @@ int main(int argc, char **argv) {
 							sendto(udpfd, SUCCESS, strlen(SUCCESS), 0, (struct sockaddr *) &cliaddr, len);
 							
 						}
-						
+
 					}
 				}
 				// send back (debug	

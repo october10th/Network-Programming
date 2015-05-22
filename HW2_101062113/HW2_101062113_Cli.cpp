@@ -55,7 +55,7 @@ void dumplines(){
 		printf("[%d] %s\n", i, recvBuff[i].c_str());
 	}
 }
-void addArticle(){
+void addArticle(){//unused
 	// A+ title ?
 	puts("EOF (ctrl + D) when you finish");
 	FILE *fout=fopen("client/client_article.txt", "w");
@@ -72,7 +72,7 @@ void addArticle(){
 	
 
 }
-void addFile(){
+void addFile(){//unused
 	int nfiles;
 	char str[MAXLINE];
 	puts("add any file? (enter a number)");
@@ -164,6 +164,7 @@ void receiveArticle(FILE *fp, int sockfd, const struct sockaddr *pservaddr, sock
 		else{
 			me.state=Article;
 		}
+		puts("----------article: ----------");
 		for(int i=0;i<totalbytes;i++){
 			totallines=10;
 			if((n = recvfrom(sockfd, recvline, MAXLINE, 0, NULL, NULL))<0){
@@ -223,8 +224,13 @@ void sendFile(string filename, FILE *fp, int sockfd, const struct sockaddr *pser
 	int tot=0;
 	FILE *fin=fopen(filename.c_str(), "rb");
 	totalbytes=getTotalbytes(filename);
+	// send total bytes (with ack)
 	sprintf(sendline, "%d", totalbytes);
 	sendto(sockfd, sendline, strlen(sendline), 0, pservaddr, servlen);
+	WaitingAck=1;
+	sendbytes=strlen(sendline);
+    waitingAck(fp, sockfd, pservaddr, servlen);
+    // start sending
 	while (!feof(fin)) {
 		
         sendbytes=fread(sendline, sizeof(char), sizeof(sendline), fin);
@@ -264,6 +270,15 @@ void downloadFile(string filename, FILE *fp, int sockfd, const struct sockaddr *
 		}
 		puts("download fin");
 		
+	}
+	if(recvbytes!=totalbytes){
+		string str="rm "+filename;
+		system(str.c_str());
+		printf("recvbytes %d totalbytes %d\n", recvbytes, totalbytes);
+		puts("packet loss delete file");
+	}
+	else{
+		puts("no packet loss");
 	}
 	fclose(fout);
 	
@@ -393,6 +408,7 @@ void dg_cli(FILE *fp, int sockfd, const struct sockaddr *pservaddr, socklen_t se
 							isCurrentAuthor=0;
 							if(strcmp(recvline, SUCCESS)==0){
 								receiveArticle(fp, sockfd, pservaddr, servlen);
+								recvline[0]='\0';
 							}
 						}
 						//------------------------------------------------
@@ -411,6 +427,7 @@ void dg_cli(FILE *fp, int sockfd, const struct sockaddr *pservaddr, socklen_t se
 							if(strcmp(recvline, SUCCESS)==0){
 								// puts(recvline);
 								receiveArticle(fp, sockfd, pservaddr, servlen);
+								recvline[0]='\0';
 							}
 
 						}
@@ -419,21 +436,16 @@ void dg_cli(FILE *fp, int sockfd, const struct sockaddr *pservaddr, socklen_t se
 								// puts(recvline);
 								downloadFile(tok[1], fp, sockfd, pservaddr, servlen);
 								receiveArticle(fp, sockfd, pservaddr, servlen);
+								recvline[0]='\0';
 							}
 						}
 						else if(tok[0]=="U"){// upload
 							if(strcmp(recvline, SUCCESS)==0){
 								// puts(recvline);
-								// send total bytes (ack)
-								totalbytes=getTotalbytes(tok[1]);
-								sprintf(sendline, "%d", totalbytes);
-								sendto(sockfd, sendline, strlen(sendline), 0, pservaddr, servlen);
-								WaitingAck=1;
-								sendbytes=strlen(sendline);
-								waitingAck(fp, sockfd, pservaddr, servlen);
 								// send file ( still ack )
 								sendFile(tok[1], fp, sockfd, pservaddr, servlen);
 								receiveArticle(fp, sockfd, pservaddr, servlen);
+								recvline[0]='\0';
 							}
 						}
 						else if(tok[0]=="Add"){// add black list
