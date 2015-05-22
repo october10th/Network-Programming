@@ -4,9 +4,11 @@ int SERV_PORT=7122;
 struct timeval timeout;
 int WaitingAck;
 Account me;
-string currentAuthor;// current author
+int isCurrentAuthor;// current author
 char sendline[MAXLINE], recvline[MAXLINE + 1];
 int retVal;
+int n, maxfdp1;
+int totalbytes, totallines, recvbytes;
 fd_set rset;
 vector<string>tok;
 vector<string> recvBuff, sendBuff;
@@ -33,13 +35,14 @@ void showMsg(){
 	}
 	else if(me.state==Article){
 		puts("[R]esponse [D]ownload [U]pload");
-		if(currentAuthor==me.ID)// current author is me
-			puts("[A]dd/[D]el [B]lack list [DEL]ete");// only author
-		puts("[R]eturn");
+		if(isCurrentAuthor){// current author is me
+			puts("[Add]/[Del] black list");puts("[DELETE] article");// only author
+		}
+		puts("[Ret]urn");
 		puts("----------------------------------------");
 		puts("[R]esponse [留言內容]");
-		if(currentAuthor==me.ID)// current author is me
-			puts("[A]dd/[D]el black list [User ID]");// only author
+		if(isCurrentAuthor)// current author is me
+			puts("[Add]/[Del] black list [User ID]");// only author
 		puts("[D]ownload/[U]pload [File name]");
 		
 	}
@@ -78,7 +81,7 @@ void addFile(){
 	}
 }
 void waitingAck(FILE *fp, int sockfd, const struct sockaddr *pservaddr, socklen_t servlen){
-	int n, maxfdp1;
+
 
 	while(1){
 		FD_SET(fileno(fp), &rset); /*fp: I/O file pointer*/
@@ -112,13 +115,93 @@ void waitingAck(FILE *fp, int sockfd, const struct sockaddr *pservaddr, socklen_
 	WaitingAck=0;
 
 }
+void showResult(FILE *fp, int sockfd, const struct sockaddr *pservaddr, socklen_t servlen){
+	if((n = recvfrom(sockfd, recvline, MAXLINE, 0, NULL, NULL))<0){
+		puts("n<0");
+	}
+	else{
+		recvline[n] = 0; /* null terminate */
+		totalbytes=atoi(recvline);
+		
+		for(int i=0;i<totalbytes;i++){
+			totallines=10;
+			if((n = recvfrom(sockfd, recvline, MAXLINE, 0, NULL, NULL))<0){
+				puts("n<0");
+			}
+			else{
+				recvline[n] = 0;
+				totallines=atoi(recvline);
+			}
+			for(int j=0;j<totallines;j++){
+				if((n = recvfrom(sockfd, recvline, MAXLINE, 0, NULL, NULL))<0){
+					puts("n<0");
+				}
+				else{
+					recvline[n] = 0; /* null terminate */
+					if(j%2==0 && totallines>1)printf("%s:", recvline);
+					else puts(recvline);
+				}
+			}
+			puts("");
+		}
+	}
+}
+void receiveArticle(FILE *fp, int sockfd, const struct sockaddr *pservaddr, socklen_t servlen){
+	// article
+	if((n = recvfrom(sockfd, recvline, MAXLINE, 0, NULL, NULL))<0){
+		puts("n<0");
+	}
+	else{
+		recvline[n] = 0; /* null terminate */
+		totalbytes=atoi(recvline);
+		if(totalbytes==0){
+			puts("(black list)permission denied!");
+		}
+		else{
+			me.state=Article;
+		}
+		for(int i=0;i<totalbytes;i++){
+			totallines=10;
+			if((n = recvfrom(sockfd, recvline, MAXLINE, 0, NULL, NULL))<0){
+				puts("n<0");
+			}
+			else{
+				recvline[n] = 0;
+				totallines=atoi(recvline);
+			}
+			for(int j=0;j<totallines;j++){
+				if((n = recvfrom(sockfd, recvline, MAXLINE, 0, NULL, NULL))<0){
+					puts("n<0");
+				}
+				else{
+					recvline[n] = 0; /* null terminate */
+					if(j%2==0 && totallines>1)printf("%s:", recvline);
+					else puts(recvline);
+					if(j==3&&strcmp(recvline, me.ID.c_str())==0){
+						isCurrentAuthor=1;
+					}
+
+				}
+			}
+			puts("");
+		}
+	}
+	
+
+	// response
+	puts("reponse: ");
+	showResult(fp, sockfd, pservaddr, servlen);
+	// file
+	puts("file: ");
+	showResult(fp, sockfd, pservaddr, servlen);
+}
 
 void dg_cli(FILE *fp, int sockfd, const struct sockaddr *pservaddr, socklen_t servlen) {
-	int n, maxfdp1;
 	
-	int totalbytes, recvbyte;
+	
+	
 	timeout.tv_sec=0;
-	timeout.tv_usec=1000;
+	timeout.tv_usec=5000;
 	FD_ZERO(&rset); /*initial select*/
 	me.state=Init;
 	showMsg();// Login or Register
@@ -138,6 +221,7 @@ void dg_cli(FILE *fp, int sockfd, const struct sockaddr *pservaddr, socklen_t se
 					return; /* all done */
 				
 				sendline[strlen(sendline)-1]='\0';// remove '\n'
+
 				sendto(sockfd, sendline, strlen(sendline), 0, pservaddr, servlen);
 				recvBuff.clear();
 				WaitingAck=1;
@@ -229,7 +313,14 @@ void dg_cli(FILE *fp, int sockfd, const struct sockaddr *pservaddr, socklen_t se
 							// 
 						}
 						else if(tok[0]=="E"){// enter article
+							puts("enter article");
+							isCurrentAuthor=0;
+							if(strcmp(recvline, SUCCESS)==0){
+								
+								receiveArticle(fp, sockfd, pservaddr, servlen);
 
+								
+							}
 						}
 						//------------------------------------------------
 						else if(tok[0]=="Y"){// yell
@@ -242,7 +333,47 @@ void dg_cli(FILE *fp, int sockfd, const struct sockaddr *pservaddr, socklen_t se
 						}
 					}
 					else if(me.state==Article){
+						if(tok[0]=="R"){// response
 
+							if(strcmp(recvline, SUCCESS)==0){
+								puts(recvline);
+								receiveArticle(fp, sockfd, pservaddr, servlen);
+							}
+						}
+						else if(tok[0]=="D"){// download
+							
+						}
+						else if(tok[0]=="U"){// upload
+
+						}
+						else if(tok[0]=="Add"){// add black list
+							if(strcmp(recvline, SUCCESS)==0){
+								puts(recvline);
+							}
+						}
+						else if(tok[0]=="Del"){// delete black list
+							if(strcmp(recvline, SUCCESS)==0){
+								puts(recvline);
+							}
+						}
+						else if(tok[0]=="DELETE"){// delete article
+							if(strcmp(recvline, SUCCESS)==0){
+								puts(recvline);
+								puts("if you didn't delete success you will still be sent to the prev page");
+								isCurrentAuthor=0;
+								me.state=Normal;
+
+							}
+
+						}
+						else if(tok[0]=="Ret"){// return
+							if(strcmp(recvline, SUCCESS)==0){
+								puts(recvline);
+								isCurrentAuthor=0;
+								me.state=Normal;
+
+							}
+						}
 					}
 					// puts(recvline);
 					//client doesn't have to ack
@@ -259,7 +390,7 @@ void dg_cli(FILE *fp, int sockfd, const struct sockaddr *pservaddr, socklen_t se
 		else{
 			waitingAck(fp, sockfd, pservaddr, servlen);
 		}
-		printf("retVal = %d\n", retVal);
+		// printf("retVal = %d\n", retVal);
 	}
 }
 

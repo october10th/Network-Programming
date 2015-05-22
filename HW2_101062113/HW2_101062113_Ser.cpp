@@ -1,10 +1,23 @@
 #include "header.h"
 #include <sqlite3.h>
+int listenfd, connfd, udpfd, nready, maxfdp1;
+char mesg[MAXLINE];
+pid_t childpid;
+int SERV_PORT=7122;
+fd_set rset;
+ssize_t n;
+socklen_t len;
+const int on = 1;
+struct sockaddr_in cliaddr, servaddr;
+vector<string>tok;
+Account currentUser;
+//
 map<User, Account>userAccount;
 map<Account, User>accountUser;
 sqlite3 *db;
 vector< map < string, string > >result;
 int WaitingAck;
+
 void sig_chld(int signo){
 	pid_t pid;
 	int stat;
@@ -115,14 +128,14 @@ int login(Account acc){
 	}
 	return 0;
 }
-int addArticle(string ID, string title, string content){
+int addArticle(string ID, string title, string content, string IP, int port){
 	string sql="SELECT MAX(aid) FROM article;";
 	int aid=0;
 	cout<<sql<<endl;
 	sql_exec(sql);
 	showResult();
 	if(result[0][string("MAX(aid)")]!="NULL")aid=1+atoi(result[0][string("MAX(aid)")].c_str());
-	sql="INSERT INTO article (aid,author,title,content) VALUES('"+toString(aid)+"', '"+ID+"', '"+title+"', '"+content+"');";
+	sql="INSERT INTO article (aid,author,title,content,IP,port) VALUES('"+toString(aid)+"', '"+ID+"', '"+title+"', '"+content+"', '"+IP+"', '"+toString(port)+"');";
 	cout<<sql<<endl;
 	sql_exec(sql);
 	showResult();
@@ -135,19 +148,125 @@ void showArticle(){
 	sql_exec(sql);
 	showResult();
 }
+void enterArticle(int aid){
+	string sql="SELECT * FROM article WHERE aid='"+toString(aid)+"' ;";
+	cout<<sql<<endl;
+	sql_exec(sql);
+	showResult();
+}
+void deleteArticle(string ID, int aid){
+	string sql="DELETE FROM article WHERE author='"+ID+"' AND aid='"+toString(aid)+"';";
+	cout<<sql<<endl;
+	sql_exec(sql);
+	showResult();
+}
+void updateHit(int aid){
+	string sql="SELECT hit FROM article WHERE aid='"+toString(aid)+"';";
+	cout<<sql<<endl;
+	sql_exec(sql);
+	showResult();
+	int hit=atoi(result[0].begin()->second.c_str());
+	sql="UPDATE article SET hit='"+toString(hit+1)+"' WHERE aid='"+toString(aid)+"';";
+	cout<<sql<<endl;
+	sql_exec(sql);
+	showResult();
+}
+int addResponse(string ID, int aid, string content, string IP, int port){
+	string sql="SELECT MAX(rid) FROM response;";
+	int rid=0;
+	cout<<sql<<endl;
+	sql_exec(sql);
+	showResult();
+	if(result[0][string("MAX(rid)")]!="NULL")rid=1+atoi(result[0][string("MAX(rid)")].c_str());
+	sql="INSERT INTO response (aid,rid,author,content,IP,port) VALUES('"+toString(aid)+"', '"+toString(rid)+"', '"+ID+"', '"+content+"', '"+IP+"', '"+toString(port)+"');";
+	cout<<sql<<endl;
+	sql_exec(sql);
+	showResult();
+	printf("rid = %d\n", rid);
+	return rid;
+}
+void enterResponse(int aid){
+	string sql="SELECT * FROM response WHERE aid='"+toString(aid)+"' ;";
+	cout<<sql<<endl;
+	sql_exec(sql);
+	showResult();
+}
+void deleteResponse(int aid){
+	string sql="DELETE FROM response WHERE aid='"+toString(aid)+"';";
+	cout<<sql<<endl;
+	sql_exec(sql);
+	showResult();
+}
+int isBlackList(string ID, int aid){
+	string sql="SELECT * FROM blacklist WHERE aid='"+toString(aid)+"' AND ID='"+ID+"';";
+	cout<<sql<<endl;
+	sql_exec(sql);
+	showResult();
+	cout<<"blacklist:"<<result.size()<<endl;
+	return (int)result.size();
+}
+void addBlacklist(string ID, int aid){
+	string sql="INSERT INTO blacklist (ID,aid) VALUES ('"+ID+"','"+toString(aid)+"');";
+	cout<<sql<<endl;
+	sql_exec(sql);
+	showResult();
+}
+void deleteBlacklist(string ID, int aid){
+	string sql="DELETE FROM blacklist WHERE ID='"+ID+"' AND aid='"+toString(aid)+"';";
+	cout<<sql<<endl;
+	sql_exec(sql);
+	showResult();
+}
+void sendResult(){
+	string str=toString(result.size());
+	sendto(udpfd, str.c_str(), str.length(), 0, (struct sockaddr *) &cliaddr, len);
+	for(int i=0;i<result.size();i++){
+		str=toString(result[i].size()*2);
+		sendto(udpfd, str.c_str(), str.length(), 0, (struct sockaddr *) &cliaddr, len);
+		
+		for (std::map<string, string>::iterator it=result[i].begin(); it!=result[i].end(); ++it){
+			sendto(udpfd, it->first.c_str(), it->first.length(), 0, (struct sockaddr *) &cliaddr, len);
+			sendto(udpfd, it->second.c_str(), it->second.length(), 0, (struct sockaddr *) &cliaddr, len);
+		}
+	}
+}
+int addFile(string ID, int aid, string path, string IP, int port){
+	string sql="SELECT MAX(fid) FROM filelist;";
+	int fid=0;
+	cout<<sql<<endl;
+	sql_exec(sql);
+	showResult();
+	if(result[0][string("MAX(rid)")]!="NULL")fid=1+atoi(result[0][string("MAX(fid)")].c_str());
+	sql="INSERT INTO filelist (aid,fid,author,path,IP,port) VALUES('"+toString(aid)+"', '"+toString(fid)+"', '"+ID+"', '"+path+"', '"+IP+"', '"+toString(port)+"');";
+	cout<<sql<<endl;
+	sql_exec(sql);
+	showResult();
+	printf("fid = %d\n", fid);
+	return fid;
+}
+void enterFile(int aid){
+	string sql="SELECT * FROM filelist WHERE aid='"+toString(aid)+"' ;";
+	cout<<sql<<endl;
+	sql_exec(sql);
+	showResult();
+}
+
+void sendArticle(){
+	// article
+	enterArticle(currentUser.currentAid);
+	sendResult();
+	
+	// response
+	enterResponse(currentUser.currentAid);
+	sendResult();
+
+	// file
+	enterFile(currentUser.currentAid);
+	sendResult();
+}
 int main(int argc, char **argv) {
 	system("mkdir Upload");
-	int listenfd, connfd, udpfd, nready, maxfdp1;
-	char mesg[MAXLINE];
-	pid_t childpid;
-	int SERV_PORT=7122;
-	fd_set rset;
-	ssize_t n;
-	socklen_t len;
-	const int on = 1;
-	struct sockaddr_in cliaddr, servaddr;
-	vector<string>tok;
-	Account currentUser;
+	
 	init();
 	userAccount.clear();
 	accountUser.clear();
@@ -207,10 +326,10 @@ int main(int argc, char **argv) {
 						//register
 						currentUser=Account(tok[1], tok[2]);
 						currentUser.state=Normal;
+						currentUser.currentAid=-1;
 						userAccount[User(getIP(cliaddr), getPort(cliaddr), cliaddr)]=currentUser;
 						accountUser[currentUser]=User(getIP(cliaddr), getPort(cliaddr), cliaddr);
 						insertUser(currentUser);
-
 						puts("register sucess");
 						sendto(udpfd, SUCCESS, strlen(SUCCESS), 0, (struct sockaddr *) &cliaddr, len);
 						
@@ -222,7 +341,7 @@ int main(int argc, char **argv) {
 							currentUser.state=Normal;
 							userAccount[User(getIP(cliaddr), getPort(cliaddr), cliaddr)]=currentUser;
 							accountUser[currentUser]=User(getIP(cliaddr), getPort(cliaddr), cliaddr);
-							insertUser(currentUser);
+							
 							puts("login sucess");
 							sendto(udpfd, SUCCESS, strlen(SUCCESS), 0, (struct sockaddr *) &cliaddr, len);
 						}
@@ -259,11 +378,12 @@ int main(int argc, char **argv) {
 						}
 						else if(tok[0]=="SA"){// show article
 							puts("show article");
+
 							showArticle();
 							cout<<"result size: "<<result.size()<<endl;
 							sendto(udpfd, SUCCESS, strlen(SUCCESS), 0, (struct sockaddr *) &cliaddr, len);
-							// send all article aid title author
 							
+							// send all article aid title author
 							string str=toString(result.size());
 							sendto(udpfd, str.c_str(), str.length(), 0, (struct sockaddr *) &cliaddr, len);
 							for(int i=0;i<result.size();i++){
@@ -276,7 +396,7 @@ int main(int argc, char **argv) {
 						}
 						else if(tok[0]=="A"){// add article
 							puts("add article");
-							addArticle(currentUser.ID, tok[1], tok[2]);
+							addArticle(currentUser.ID, tok[1], tok[2], getIP(cliaddr), getPort(cliaddr));
 							sendto(udpfd, SUCCESS, strlen(SUCCESS), 0, (struct sockaddr *) &cliaddr, len);
 							// receiving files
 							// puts("receiving files");
@@ -285,6 +405,22 @@ int main(int argc, char **argv) {
 
 						}
 						else if(tok[0]=="E"){// enter article
+							printf("enter article: %s\n", tok[1].c_str());
+							updateHit(atoi(tok[1].c_str()));
+							sendto(udpfd, SUCCESS, strlen(SUCCESS), 0, (struct sockaddr *) &cliaddr, len);
+							
+							if(isBlackList(currentUser.ID, atoi(tok[1].c_str()))){
+								string str=toString(0);
+								sendto(udpfd, str.c_str(), str.length(), 0, (struct sockaddr *) &cliaddr, len);
+							}
+							else{
+								
+								currentUser.currentAid=atoi(tok[1].c_str());
+								currentUser.state=Article;
+								userAccount[User(getIP(cliaddr), getPort(cliaddr), cliaddr)]=currentUser;
+								sendArticle();
+							}
+							
 
 						}
 						//------------------------------------------------
@@ -301,7 +437,50 @@ int main(int argc, char **argv) {
 					
 					}
 					else if(currentUser.state==Article){
+						if(tok[0]=="R"){// response
+							addResponse(currentUser.ID, currentUser.currentAid,tok[1], getIP(cliaddr), getPort(cliaddr));
+							sendto(udpfd, SUCCESS, strlen(SUCCESS), 0, (struct sockaddr *) &cliaddr, len);
+							sendArticle();
+						}
+						else if(tok[0]=="D"){// download
 
+						}
+						else if(tok[0]=="U"){// upload
+
+						}
+						else if(tok[0]=="Add"){// add black list
+							addBlacklist(tok[1], currentUser.currentAid);
+							puts("add black list");
+							sendto(udpfd, SUCCESS, strlen(SUCCESS), 0, (struct sockaddr *) &cliaddr, len);
+							
+
+						}
+						else if(tok[0]=="Del"){// delete black list
+							deleteBlacklist(tok[1], currentUser.currentAid);
+							puts("delete black list");
+							sendto(udpfd, SUCCESS, strlen(SUCCESS), 0, (struct sockaddr *) &cliaddr, len);
+							
+						}
+						else if(tok[0]=="DELETE"){// delete article
+							// article
+							deleteArticle(currentUser.ID, currentUser.currentAid);
+							// response
+							deleteResponse(currentUser.currentAid);
+							// files
+							currentUser.currentAid=-1;
+							currentUser.state=Normal;
+							userAccount[User(getIP(cliaddr), getPort(cliaddr), cliaddr)]=currentUser;
+							puts("delete article");
+							sendto(udpfd, SUCCESS, strlen(SUCCESS), 0, (struct sockaddr *) &cliaddr, len);
+							
+						}
+						else if(tok[0]=="Ret"){// return
+							currentUser.currentAid=-1;
+							currentUser.state=Normal;
+							userAccount[User(getIP(cliaddr), getPort(cliaddr), cliaddr)]=currentUser;
+							sendto(udpfd, SUCCESS, strlen(SUCCESS), 0, (struct sockaddr *) &cliaddr, len);
+							
+						}
 					}
 				}
 				// send back (debug	

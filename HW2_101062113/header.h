@@ -56,7 +56,8 @@ struct User{
 };
 struct Account{
 	string ID, pw;
-	int state;
+	int state, currentAid;
+
 	Account(){state=0;}
 	Account(string _username){ID=_username;}
 	Account(string _username, string _pw){ID=_username, pw=_pw;state=0;}
@@ -75,10 +76,10 @@ const char SUCCESS[]="Success!";
 const char FAIL[]="Fail!";
 const char create_sql[6][512]={
 	"CREATE TABLE user(ID VARCHAR(64) PRIMARY KEY, pw VARCHAR(64));",
-	"CREATE TABLE article( aid INTEGER PRIMARY KEY, author VARCHAR(64), title VARCHAR(64), content VARCHAR(1024), hit INTEGER DEFAULT 0 ) ;",
-	"CREATE TABLE response( rid INTEGER PRIMARY KEY, aid INTEGER , content VARCHAR(1024)) ;",
-	"CREATE TABLE blacklist( ID VARCHAR(64) PRIMARY KEY, aid INTEGER) ;",
-	"CREATE TABLE filelist( fid INTEGER PRIMARY KEY, path VARCHAR(1024), aid INTEGER, rid INTEGER) ;"
+	"CREATE TABLE article( aid INTEGER PRIMARY KEY, author VARCHAR(64), title VARCHAR(64), content VARCHAR(1024), IP VARCHAR(64), port INTEGER, time timestamp DEFAULT CURRENT_TIMESTAMP, hit INTEGER DEFAULT 0 ) ;",
+	"CREATE TABLE response( rid INTEGER PRIMARY KEY, aid INTEGER , author VARCHAR(64), content VARCHAR(1024), IP VARCHAR(64), port INTEGER, time timestamp DEFAULT CURRENT_TIMESTAMP) ;",
+	"CREATE TABLE blacklist( ID VARCHAR(64) , aid INTEGER) ;",
+	"CREATE TABLE filelist( fid INTEGER PRIMARY KEY, path VARCHAR(1024), aid INTEGER, author VARCHAR(64), IP VARCHAR(64), port INTEGER, time timestamp DEFAULT CURRENT_TIMESTAMP) ;"
 };
 vector<string>parse(string str){
 	string item;
@@ -91,7 +92,7 @@ vector<string>parse(string str){
     return elems;
 }
 string toString(int a){
-	char str[50];
+	char str[20];
 	sprintf(str, "%d", a);
 	return string(str);
 }
