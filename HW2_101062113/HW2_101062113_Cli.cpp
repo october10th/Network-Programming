@@ -90,6 +90,9 @@ void waitingAck(FILE *fp, int sockfd, const struct sockaddr *pservaddr, socklen_
 		FD_SET(fileno(fp), &rset); /*fp: I/O file pointer*/
 		FD_SET(sockfd, &rset); /*fileno convers fp into descriptor*/
 		maxfdp1 = max(fileno(fp), sockfd) + 1;
+
+		timeout.tv_sec=0;
+		timeout.tv_usec=100000;
 		retVal=select(maxfdp1, &rset, NULL, NULL, &timeout);
 		if (FD_ISSET(sockfd, &rset)) { /* socket is readable */
 			if((n = recvfrom(sockfd, recvline, MAXLINE, 0, NULL, NULL))<0){
