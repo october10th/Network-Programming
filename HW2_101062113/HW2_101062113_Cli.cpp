@@ -329,6 +329,7 @@ void dg_cli(FILE *fp, int sockfd, const struct sockaddr *pservaddr, socklen_t se
 				else{
 					recvline[n] = 0; /* null terminate */
 					puts("recv:");
+					system("clear");
 					tok.clear();
 					tok=parse(sendline);
 					if(tok.size()==0){
