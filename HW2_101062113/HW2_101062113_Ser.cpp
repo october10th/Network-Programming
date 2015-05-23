@@ -533,13 +533,16 @@ int main(int argc, char **argv) {
 						}
 						//------------------------------------------------
 						else if(tok[0]=="Y"){// yell
+							
+							string str=currentUser.ID+" yell : "+tok[1];
 							for (std::map<Account, User>::iterator it=accountUser.begin(); it!=accountUser.end(); ++it){
-	    						sendto(udpfd, tok[1].c_str(), tok[1].length(), 0, (struct sockaddr *) &(it->second.cliaddr), sizeof(it->second.cliaddr));
+	    						sendto(udpfd, str.c_str(), str.length(), 0, (struct sockaddr *) &(it->second.cliaddr), sizeof(it->second.cliaddr));
 	    					}
 						}
 						else if(tok[0]=="T"){// tell
 							User usr=accountUser[Account(tok[1])];
-							sendto(udpfd, tok[2].c_str(), tok[2].length(), 0, (struct sockaddr *) &usr.cliaddr, sizeof(usr.cliaddr));
+							string str=currentUser.ID+" tell : "+tok[2];
+							sendto(udpfd, str.c_str(), str.length(), 0, (struct sockaddr *) &usr.cliaddr, sizeof(usr.cliaddr));
 	    					
 						}
 					
