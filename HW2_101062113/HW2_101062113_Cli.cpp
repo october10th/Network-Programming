@@ -26,11 +26,13 @@ void showMsg(){
 		puts("[SU]Show User [SA]Show Article [A]dd Article [E]nter Article");
 		puts("[Y]ell [T]ell [L]ogout");
 		puts("[Del]eteAccount");// change account?
+		puts("[AU]thor");
 		puts("----------------------------------------");
 		puts("[A]ddArticle [title(at most 64 bytes)] [content(at most 300bytes)]");
 		puts("[Y]ell [廣播內容]");
 		puts("[T]ell [User ID] [私密內容]");
 		puts("[E]nter Article [文章 ID]");
+		puts("[AU]thor [author ID]   (show articles by that author)");
 
 	}
 	else if(me.state==Article){
@@ -371,6 +373,31 @@ void dg_cli(FILE *fp, int sockfd, const struct sockaddr *pservaddr, socklen_t se
 						else if(tok[0]=="SA"){// show article
 							if(strcmp(recvline, SUCCESS)==0){
 								puts("show article:");
+								if((n = recvfrom(sockfd, recvline, MAXLINE, 0, NULL, NULL))<0){
+									puts("n<0");
+								}
+								else{
+									recvline[n] = 0; /* null terminate */
+									totalbytes=atoi(recvline);
+									for(int i=0;i<totalbytes;i++){
+										for(int j=0;j<4;j++){
+											if((n = recvfrom(sockfd, recvline, MAXLINE, 0, NULL, NULL))<0){
+												puts("n<0");
+											}
+											else{
+												recvline[n] = 0; /* null terminate */
+												printf("%s |", recvline);
+											}
+										}
+										puts("");
+									}
+									recvline[0]='\0';
+								}
+							}
+						}
+						else if(tok[0]=="AU"){// show article by author
+							if(strcmp(recvline, SUCCESS)==0){
+								puts("show article by author:");
 								if((n = recvfrom(sockfd, recvline, MAXLINE, 0, NULL, NULL))<0){
 									puts("n<0");
 								}

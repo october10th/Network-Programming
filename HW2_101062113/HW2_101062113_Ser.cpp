@@ -156,6 +156,12 @@ void showArticle(){
 	sql_exec(sql);
 	showResult();
 }
+void showArticle(string ID){
+	string sql="SELECT aid,author,title,hit FROM article WHERE author='"+ID+"' ;";
+	cout<<sql<<endl;
+	sql_exec(sql);
+	showResult();
+}
 void enterArticle(int aid){
 	string sql="SELECT * FROM article WHERE aid='"+toString(aid)+"' ;";
 	cout<<sql<<endl;
@@ -273,10 +279,23 @@ void enterFile(int aid){
 	showResult();
 }
 void deleteFile(int aid){
+	//delete file from computer
+	enterFile(aid);
+	for(int i=0;i<result.size();i++){
+		for (std::map<string, string>::iterator it=result[i].begin(); it!=result[i].end(); ++it){
+    		if(it->first=="path"){
+    			cout<<"delete file : "<<it->second<<endl;
+    			string str="rm "+it->second;
+				system(str.c_str());
+    		}
+    	}
+	}
+	//---
 	string sql="DELETE FROM filelist WHERE aid='"+toString(aid)+"';";
 	cout<<sql<<endl;
 	sql_exec(sql);
 	showResult();
+	
 }
 void deleteFile(string filename){
 	string sql="DELETE FROM filelist WHERE path='"+filename+"';";
@@ -490,6 +509,24 @@ int main(int argc, char **argv) {
 							puts("show article");
 
 							showArticle();
+							cout<<"result size: "<<result.size()<<endl;
+							sendto(udpfd, SUCCESS, strlen(SUCCESS), 0, (struct sockaddr *) &cliaddr, len);
+							
+							// send all article aid title author
+							string str=toString(result.size());
+							sendto(udpfd, str.c_str(), str.length(), 0, (struct sockaddr *) &cliaddr, len);
+							for(int i=0;i<result.size();i++){
+								for (std::map<string, string>::iterator it=result[i].begin(); it!=result[i].end(); ++it){
+									str=it->first+" : "+it->second;
+		    						sendto(udpfd, str.c_str(), str.length(), 0, (struct sockaddr *) &cliaddr, len);
+		    					}
+							}
+
+						}
+						else if(tok[0]=="AU"){// show article by author
+							puts("show article");
+
+							showArticle(tok[1]);//author ID
 							cout<<"result size: "<<result.size()<<endl;
 							sendto(udpfd, SUCCESS, strlen(SUCCESS), 0, (struct sockaddr *) &cliaddr, len);
 							
