@@ -370,6 +370,7 @@ void sendFile(string filename){
 	while (!feof(fin)) {
         sendbytes=fread(sendline, sizeof(char), sizeof(sendline), fin);
         sendto(udpfd, sendline, sendbytes, 0, (struct sockaddr *) &cliaddr, len);
+        usleep(5000);
         printf("sendbytes=%d (%d)\n", sendbytes, tot+=sendbytes);
     }
 
