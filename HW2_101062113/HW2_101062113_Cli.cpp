@@ -54,6 +54,7 @@ void dumplines(){
 	for(int i=0;i<recvBuff.size();i++){
 		printf("[%d] %s\n", i, recvBuff[i].c_str());
 	}
+	recvBuff.clear();
 }
 void addArticle(){//unused
 	// A+ title ?
@@ -325,6 +326,10 @@ void dg_cli(FILE *fp, int sockfd, const struct sockaddr *pservaddr, socklen_t se
 					puts("recv:");
 					tok.clear();
 					tok=parse(sendline);
+					if(tok.size()==0){
+						puts(recvline);
+						continue;
+					}
 					if(me.state==Init){
 						if(strcmp(recvline, SUCCESS)==0){// register or login success
 							me.state=Normal;
@@ -351,13 +356,14 @@ void dg_cli(FILE *fp, int sockfd, const struct sockaddr *pservaddr, socklen_t se
 								puts("show users:");
 								dumplines();
 								puts("------end------");
-								recvline[0]='\0';
+								sendline[0]=0;
+								
 							}
 							else{
 								recvBuff.push_back(recvline);
-
-								recvline[0]='\0';
+								continue;
 							}
+							recvline[0]=0;
 						}
 						else if(tok[0]=="SA"){// show article
 							if(strcmp(recvline, SUCCESS)==0){
@@ -480,6 +486,7 @@ void dg_cli(FILE *fp, int sockfd, const struct sockaddr *pservaddr, socklen_t se
 					puts(recvline);
 					//client doesn't have to ack
 					showMsg();
+
 				}
 				
 			}
