@@ -543,7 +543,12 @@ int main(int argc, char **argv) {
 						}
 						else if(tok[0]=="A"){// add article
 							puts("add article");
-							addArticle(currentUser.ID, tok[1], tok[2], getIP(cliaddr), getPort(cliaddr));
+							string str=tok[2];
+							for(int i=3;i<tok.size();i++){
+								str+=" ";
+								str+=tok[i];
+							}
+							addArticle(currentUser.ID, tok[1], str, getIP(cliaddr), getPort(cliaddr));
 							sendto(udpfd, SUCCESS, strlen(SUCCESS), 0, (struct sockaddr *) &cliaddr, len);
 							// receiving files
 							// puts("receiving files");
@@ -577,16 +582,24 @@ int main(int argc, char **argv) {
 	    					}
 						}
 						else if(tok[0]=="T"){// tell
-							User usr=accountUser[Account(tok[1])];
-							string str=currentUser.ID+" tell : "+tok[2];
-							sendto(udpfd, str.c_str(), str.length(), 0, (struct sockaddr *) &usr.cliaddr, sizeof(usr.cliaddr));
+							if(accountUser.find(Account(tok[1]))!=accountUser.end()){
+								User usr=accountUser[Account(tok[1])];
+								string str=currentUser.ID+" tell : "+tok[2];
+								sendto(udpfd, str.c_str(), str.length(), 0, (struct sockaddr *) &usr.cliaddr, sizeof(usr.cliaddr));
 	    					
+							}
+							
 						}
 					
 					}
 					else if(currentUser.state==Article){
 						if(tok[0]=="R"){// response
-							addResponse(currentUser.ID, currentUser.currentAid,tok[1], getIP(cliaddr), getPort(cliaddr));
+							string str=tok[1];
+							for(int i=2;i<tok.size();i++){
+								str+=" ";
+								str+=tok[i];
+							}
+							addResponse(currentUser.ID, currentUser.currentAid, str, getIP(cliaddr), getPort(cliaddr));
 							sendto(udpfd, SUCCESS, strlen(SUCCESS), 0, (struct sockaddr *) &cliaddr, len);
 							sendArticle();
 						}
