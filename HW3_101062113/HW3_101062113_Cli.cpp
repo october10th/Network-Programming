@@ -78,48 +78,57 @@ void sendFilelist(int& connfd){
 	}
 
 }
-void *reader(void*arg){
-	pthread_detach(pthread_self());
-	int n;
-	char recvline[MAXLINE];
-	ClientSock clientSock=*(ClientSock*)arg;
-	int connfd=clientSock.connfd;
-	while((n=read(connfd, recvline, MAXLINE)) >0) {
+// void *reader(void*arg){
+// 	pthread_detach(pthread_self());
+// 	int n;
+// 	char recvline[MAXLINE];
+// 	ClientSock clientSock=*(ClientSock*)arg;
+// 	int connfd=clientSock.connfd;
+// 	while((n=read(connfd, recvline, MAXLINE)) >0) {
 
-		recvline[n]=0;
-		puts(recvline);
-	}
-	return NULL;
-}
-void writer(int connfd, struct sockaddr_in servaddr, string ID){
-	char sendline[MAXLINE];
-	string str;
-	while(fgets(sendline, MAXLINE-ID.length()-1, stdin)!=NULL){
-		sendline[strlen(sendline)-1]='\0';// remove '\n'
-		str=ID+":"+sendline;
-		writeWithSleep(connfd, str.c_str(), str.length());
-	}
-	shutdown(connfd, SHUT_WR);
+// 		recvline[n]=0;
+// 		puts(recvline);
+// 	}
+// 	return NULL;
+// }
 
-}
 void *writer(void*arg){
 	pthread_detach(pthread_self());
-	ClientSock clientSock=*(ClientSock*)arg;
-	int connfd=clientSock.connfd;
-	struct sockaddr_in cliaddr=clientSock.addr;
+	ClientSock *clientSock=(ClientSock*)arg;
+	ClientSock tmpClientSock=*clientSock;
 	char sendline[MAXLINE];
 
-	showMsg();
 	while(fgets(sendline, MAXLINE, stdin)!=NULL){
 		sendline[strlen(sendline)-1]='\0';// remove '\n'
-		puts("sendline:");
-		puts(sendline);
-		write(connfd, sendline, strlen(sendline));
+		// printf("(writer)send to IP %s port %d connfd %d\n", getIP(clientSock->addr), getPort(clientSock->addr), clientSock->connfd);
+		if(me.state==Tell){
+			if(strcmp(sendline, EXIT)==0){
+				// shutdown(clientSock->connfd, SHUT_WR);
+				// me.state=Normal;
+				writeWithSleep(clientSock->connfd, EXIT, strlen(EXIT));// to client
+				// close(clientSock->connfd);
+				*clientSock=tmpClientSock;
+				printf("back to %s %d\n", getIP(clientSock->addr), getPort(clientSock->addr));
+				// writeWithSleep(clientSock->connfd, EXIT, strlen(EXIT));// to server
+				// showMsg();
+				continue;
+			}
+			string str=me.ID+":"+sendline;
+			cout<<str<<endl;
+			writeWithSleep(clientSock->connfd, str.c_str(), str.length());
+		}
+		else{
+			puts("sendline:");
+			puts(sendline);
+			write(clientSock->connfd, sendline, strlen(sendline));	
+		}
+		
 	}
 	return NULL;
 
 }
 void str_cli(int connfd, sockaddr_in servaddr) {
+	showMsg();
 	char recvline[MAXLINE];
 	int n;
 	string recv;
@@ -128,41 +137,59 @@ void str_cli(int connfd, sockaddr_in servaddr) {
 	clientSock->connfd=connfd;
 	clientSock->addr=servaddr;
 	
+	ClientSock tmpClientSock=*clientSock;
 	pthread_create(&tid, NULL, &writer, (void *)clientSock);
-	while((n=receive(connfd, recvline))>0){
+	while((n=receive(clientSock->connfd, recvline))>0){
+		
 		vector<string>tok;
 		tok.clear();
-		tok=parse(recvline);// == sendline
+		if(me.state==Tell){
+			if(strcmp(recvline, EXIT)==0){
+				// close(clientSock->connfd);
+				me.state=Normal;
+				writeWithSleep(clientSock->connfd, EXIT, strlen(EXIT));// to client
+				*clientSock=tmpClientSock;//connfd=clientSock->connfd;
+				writeWithSleep(clientSock->connfd, EXIT, strlen(EXIT));// to server
+				system("clear");
+				showMsg();
+				continue;
+			}
+			else{
+				puts(recvline);
+			}
+			continue;
+		}
+		if(strncmp(recvline, TALK, strlen(TALK))==0){// user B (client)
+			me.state=Tell;
+			puts("TALK~~~!!!");
+			// receive(connfd, recvline);// IP port
+			puts(recvline);
+			tok=parse(recvline);
+			// pthread_t tid;
+			printf("before IP %s port %d\n", getIP(clientSock->addr), getPort(clientSock->addr));
+			TCPconnect(clientSock->connfd, clientSock->addr, tok[1].c_str(), atoi(tok[2].c_str()));
+			printf("after IP %s port %d\n", getIP(clientSock->addr), getPort(clientSock->addr));
+			system("clear");
+			
+			continue;
+		}
+		*clientSock=tmpClientSock;
+		tok=parse(recvline);// == sendline ?
+
 		puts("recvline:(sendline)");
 		puts(recvline);
-		write(connfd, SUCCESS, strlen(SUCCESS));
+		write(clientSock->connfd, SUCCESS, strlen(SUCCESS));
 		system("clear");
 
 		// recv
-		n=receive(connfd, recvline);
+		n=receive(clientSock->connfd, recvline);// success or fail
 		puts("recvline:");
 		puts(recvline);
 		
 		
 		recv=recvline;
 		// someone tells
-		if(strcmp(recvline, TALK)==0){// user B (client)
-			write(connfd, SUCCESS, strlen(SUCCESS));
-			puts("TALK~~~!!!");
-			recvWrite(connfd, recvline);// IP port
-			tok=parse(recvline);
-			pthread_t tid;
-			ClientSock *clientSock=(ClientSock *)malloc(sizeof(ClientSock));
-			TCPconnect(clientSock->connfd, clientSock->addr, tok[0].c_str(), atoi(tok[1].c_str()));
-			pthread_create(&tid, NULL, &reader, (void *)clientSock);
-			writer(clientSock->connfd, clientSock->addr, me.ID);
-			// close(clientSock->connfd);
-
-			// end tell
-			system("clear");
-			showMsg();
-			continue;
-		}
+		
 		if(me.state==Init){
 			if(strcmp(recvline, SUCCESS)==0){// register or login success
 				me.state=Normal;
@@ -172,9 +199,10 @@ void str_cli(int connfd, sockaddr_in servaddr) {
 				str="Folder_"+tok[1];
 				chdir(str.c_str());
 				// send filelist
-				sendFilelist(connfd);
+				sendFilelist(clientSock->connfd);
 			}
 			// puts(recvline);
+			showMsg();
 		}
 		else if(me.state==Normal){
 			if(tok[0]=="Del"){// delete account
@@ -193,17 +221,17 @@ void str_cli(int connfd, sockaddr_in servaddr) {
 			// show filelist/ show user
 			else if(tok[0]=="SU"){// show user
 				if(strcmp(recvline, SUCCESS)==0){
-					write(connfd, SUCCESS, strlen(SUCCESS));
+					write(clientSock->connfd, SUCCESS, strlen(SUCCESS));
 					puts("show users:");
-					showResult(connfd);
+					showResult(clientSock->connfd);
 					puts("----------------------------------------");		
 				}
 			}
 			else if(tok[0]=="SF"){// show filelist
 				if(strcmp(recvline, SUCCESS)==0){
-					write(connfd, SUCCESS, strlen(SUCCESS));
+					write(clientSock->connfd, SUCCESS, strlen(SUCCESS));
 					puts("show filelist:");
-					showResult(connfd);
+					showResult(clientSock->connfd);
 					puts("----------------------------------------");		
 				}
 			}
@@ -214,43 +242,42 @@ void str_cli(int connfd, sockaddr_in servaddr) {
 			else if(tok[0]=="T"){// tell
 				if(strcmp(recvline, SUCCESS)==0){// user A (server)
 					// write(connfd, SUCCESS, strlen(SUCCESS));
+					me.state=Tell;
 					// choose a port
 					int port=getRandPort();
 					printf("open port = %d\n", port);
 
 					string str=toString(port);
-					writeRecv(connfd, str.c_str(), str.length());
+					writeRecv(clientSock->connfd, str.c_str(), str.length());
 
 					// set TCP connection(write)
 					struct sockaddr_in servaddr;
 					int listenid, sockfd;
 					TCPlisten(listenid, sockfd, servaddr, port);
 
-					ClientSock * clientSock=(ClientSock*)malloc(sizeof(ClientSock));
+					puts("listening ~");
 					socklen_t clilen = sizeof(clientSock->addr);
 					clientSock->connfd = accept(listenid, (struct sockaddr*)&(clientSock->addr), &clilen);
 					printf("TCP connect from IP %s (port %d)\n", getIP(clientSock->addr), getPort(clientSock->addr));
-					
+					system("clear");
 					// create a thread to read?
-					pthread_t tid;
-					pthread_create(&tid, NULL, &reader, (void *)clientSock);
-					writer(clientSock->connfd, clientSock->addr, me.ID);
+					
 					// close(clientSock->connfd);
+					
 				}
+
 				
 			}
-
-		}
-		else if(me.state==Tell){
+			showMsg();
 
 		}
 		else{
 
 		}
-		showMsg();
+		
 
 	}
-	close(connfd);
+	close(clientSock->connfd);
 }
 
 int main(int argc, char **argv) {

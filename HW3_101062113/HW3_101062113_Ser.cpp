@@ -347,27 +347,48 @@ void *run(void *arg){
 				else if(tok[0]=="T"){// A tell B
 					writeRecv(connfd, recvline, strlen(recvline));// send to client
 					if(accountUser.find(Account(tok[1]))!=accountUser.end()){
-						User userA=accountUser[currentUser];
-						User userB=accountUser[Account(tok[1])];
-						string str;
+						currentUser.state=Tell;
+						userAccount[User(getIP(cliaddr), getPort(cliaddr), cliaddr, connfd)]=currentUser;
 						// to user A
 						write(connfd, SUCCESS, strlen(SUCCESS));
+						User userA=accountUser[currentUser];
+						User userB=accountUser[Account(tok[1])];
+						Account accountB=userAccount[userB];
+						accountB.state=Tell;
+						userAccount[userB]=accountB;
+						
+						string str;
+						// to user A
 						recvWrite(connfd, recvline);// tell B connect to "port"
 						// user B
 						printf("user B connfd = %d\n", userB.connfd);
-						writeRecv(userB.connfd, TALK, strlen(TALK));
-						str=userA.IP+" "+recvline;
-						cout<<"tell user "+str<<endl;
-						writeRecv(userB.connfd, str.c_str(), str.length());// tell B :(A's) IP port
+						str=string(TALK)+" "+userA.IP+" "+recvline;
+						// write(userB.connfd, TALK, strlen(TALK));
+						
+						
+						write(userB.connfd, str.c_str(), str.length());// tell B :(A's) IP port
 
 						// string str=userB.IP+" "+toString(userB.port);
 						// writeWithSleep(connfd, str.c_str(), str.length());
 
 					}
+					else{
+						write(connfd, FAIL, strlen(FAIL));
+					}
 					
 				}
 			
-			}				
+			}
+			else if(currentUser.state==Tell){
+				if(tok[0]=="EXIT"){
+					printf("%s EXIT~\n", currentUser.ID.c_str());
+					currentUser.state=Normal;
+					userAccount[User(getIP(cliaddr), getPort(cliaddr), cliaddr, connfd)]=currentUser;
+				}
+				else{
+					printf("%s tell~\n", currentUser.ID.c_str());
+				}
+			}		
 		}
 		puts(recvline);
 		
@@ -405,7 +426,7 @@ int main(int argc, char **argv) {
 	// TCP 
 	TCPlisten(listenid, connfd, servaddr, SERV_PORT);
 	
-
+	signal(SIGCHLD, sig_chld);/* must call waitpid() */
 	while(1){
 		ClientSock * clientSock; 
 		clientSock = (ClientSock*)malloc(sizeof(ClientSock));

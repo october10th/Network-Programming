@@ -97,7 +97,9 @@ typedef struct sockaddr SA;
 const char ACK[]="ACK";
 const char SUCCESS[]="Success!";
 const char FAIL[]="Fail!";
+const char OK[]="OK";
 const char TALK[]="TALK$#@#$@#$########";
+const char EXIT[]="EXIT";
 const int TABLE_NUM=2;
 const char create_sql[TABLE_NUM][512]={
 	"CREATE TABLE user(ID VARCHAR(64) PRIMARY KEY, pw VARCHAR(64));",
@@ -136,7 +138,7 @@ int recvWrite(int connfd, char recvline[]){
 	n=read(connfd, recvline, MAXLINE);
 	if(n>=0)
 		recvline[n]=0;
-	write(connfd, SUCCESS, strlen(SUCCESS));
+	write(connfd, OK, strlen(OK));
 	return n;
 }
 void writeRecv(int connfd, const char sendline[], int length){
@@ -144,14 +146,13 @@ void writeRecv(int connfd, const char sendline[], int length){
 	int n;
 	write(connfd, sendline, length);
 	n=read(connfd, recvline, MAXLINE);
-	if(n>=0)
-		recvline[n]=0;
-	puts(sendline);
+	if(n>=0)recvline[n]=0;
+	// puts(sendline);
 	// usleep(1000);
 }
 void writeWithSleep(int connfd, const char sendline[], int length){
 	write(connfd, sendline, length);
-	puts(sendline);
+	// puts(sendline);
 	usleep(1000);
 }
 
