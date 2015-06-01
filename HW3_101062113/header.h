@@ -19,6 +19,7 @@
 #include <sstream>
 #include <pthread.h>
 #include <dirent.h> 
+#include <sys/stat.h>
 #define LISTENQ 1024
 #define MAXLINE 2048
 // #define PN 5
@@ -93,12 +94,17 @@ struct ClientSock{
 	int connfd;
 	struct sockaddr_in addr;
 };
+struct SendFileInfo{
+	ClientSock clientSock;
+	string path;
+};
 typedef struct sockaddr SA;
 const char ACK[]="ACK";
 const char SUCCESS[]="Success!";
 const char FAIL[]="Fail!";
 const char OK[]="OK";
 const char TALK[]="TALK$#@#$@#$########";
+const char UPLOAD[]="UPLOAD$#@#$@#$########";
 const char EXIT[]="EXIT";
 const int TABLE_NUM=2;
 const char create_sql[TABLE_NUM][512]={

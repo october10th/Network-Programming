@@ -67,7 +67,7 @@ void* TCPlistenClient(void *arg){
 }
 
 
-void sendFilelist(int& connfd){
+void sendFilelist(int connfd){
 	
 	vector<string>filelist=getCurFilelist();
 	string str=toString(filelist.size());
@@ -127,6 +127,72 @@ void *writer(void*arg){
 	return NULL;
 
 }
+void *sendFile(void *arg){
+	pthread_detach(pthread_self());
+	SendFileInfo sendFileInfo=*(SendFileInfo*)arg;
+	int connfd=sendFileInfo.clientSock.connfd;
+	string filename=sendFileInfo.path;
+	FILE *fin=fopen(filename.c_str(), "rb");
+	struct stat filestat;
+	char sendline[MAXLINE];
+
+	if(!fin){
+		write(connfd, toString(0).c_str(), toString(0).length());
+		return NULL;
+	}
+	
+	lstat(filename.c_str(), &filestat);
+	printf("start sending (%d bytes)\n", (int)filestat.st_size);
+	string str=toString((int)filestat.st_size);
+	writeRecv(connfd, str.c_str(), str.length());
+	usleep(100);
+	int sendbytes, totalbytes=0;
+	while (!feof(fin)) {
+		sendbytes=fread(sendline, sizeof(char), sizeof(sendline), fin);
+        printf(". sendbytes %d (%d)\n", sendbytes, totalbytes);
+        writeRecv(connfd, sendline, sendbytes);
+        totalbytes+=sendbytes;
+    }
+    usleep(1000);
+	fclose(fin);
+    printf("finished: sended %d bytes\n", totalbytes);
+	return NULL;
+}
+void *downloadFile(void *arg){
+	pthread_detach(pthread_self());
+	SendFileInfo sendFileInfo=*(SendFileInfo*)arg;
+	int connfd=sendFileInfo.clientSock.connfd;
+	FILE *fout=fopen(sendFileInfo.path.c_str(), "wb");
+
+	char recvline[MAXLINE];
+
+	if(!fout){
+		receive(connfd, recvline);
+		return NULL;
+	}
+	
+	
+	recvWrite(connfd,recvline);
+	usleep(100);
+	int sendbytes, totalbytes=atoi(recvline), currentbyte=0;
+	while (currentbyte<totalbytes) {
+		sendbytes=recvWrite(connfd, recvline);
+		fwrite(recvline, sizeof(char), sendbytes, fout);
+        printf(". sendbytes %d (%d/%d)\n", sendbytes, currentbyte, totalbytes);
+        
+        currentbyte+=sendbytes;
+
+    }
+    usleep(1000);
+	fclose(fout);
+    printf("finished: downloaded %d bytes (%d)\n", currentbyte, totalbytes);
+	return NULL;
+}
+void *downloadManyFile(void *arg){
+	//FILE ab? 
+	// or one time???
+	return NULL;
+}
 void str_cli(int connfd, sockaddr_in servaddr) {
 	showMsg();
 	char recvline[MAXLINE];
@@ -143,6 +209,24 @@ void str_cli(int connfd, sockaddr_in servaddr) {
 		
 		vector<string>tok;
 		tok.clear();
+		// Upload
+		if(strncmp(recvline, UPLOAD, strlen(UPLOAD))==0){
+
+			puts("upload~~~!!!");
+			puts(recvline);
+			tok=parse(recvline);
+			pthread_t tid;
+			ClientSock * uploadSock=(ClientSock*)malloc(sizeof(ClientSock));
+			TCPconnect(uploadSock->connfd, uploadSock->addr, tok[1].c_str(), atoi(tok[2].c_str()));
+			SendFileInfo sendFileInfo;
+			sendFileInfo.path=tok[3];
+			sendFileInfo.clientSock=*uploadSock;
+			pthread_create(&tid, NULL, &downloadFile, (void *)&sendFileInfo);
+
+			// system("clear");
+			continue;
+		}
+		// Tell
 		if(me.state==Tell){
 			if(strcmp(recvline, EXIT)==0){
 				// close(clientSock->connfd);
@@ -209,12 +293,14 @@ void str_cli(int connfd, sockaddr_in servaddr) {
 				if(strcmp(recvline, SUCCESS)==0){
 					me.state=Init;
 					puts("delete success");
+					chdir("..");
 				}
 			}
 			else if(tok[0]=="L"){// logout
 				if(strcmp(recvline, SUCCESS)==0){
 					me.state=Init;
 					puts("logout success");
+					chdir("..");
 				}
 			}
 			//------------------------------------------------
@@ -237,7 +323,41 @@ void str_cli(int connfd, sockaddr_in servaddr) {
 			}
 			//------------------------------------------------
 			// upload download
+			else if(tok[0]=="D"){// download
+				if(strcmp(recvline, SUCCESS)==0){
+					// puts(recvline);
+					// downloadFile(tok[1], fp, sockfd, pservaddr, servlen);
+					// receiveArticle(fp, sockfd, pservaddr, servlen);
+					// recvline[0]='\0';
+				}
+			}
+			else if(tok[0]=="U"){// upload
+				if(strcmp(recvline, SUCCESS)==0){
 
+					int port=getRandPort();
+					printf("open port = %d\n", port);
+
+					string str=toString(port);
+					writeRecv(clientSock->connfd, str.c_str(), str.length());
+
+					// set TCP connection(write)
+					struct sockaddr_in servaddr;
+					int listenid, sockfd;
+					TCPlisten(listenid, sockfd, servaddr, port);
+
+					puts("listening ~");
+					ClientSock * uploadSock=(ClientSock*)malloc(sizeof(ClientSock));
+					socklen_t clilen = sizeof(clientSock->addr);
+					uploadSock->connfd = accept(listenid, (struct sockaddr*)&(uploadSock->addr), &clilen);
+					printf("TCP connect from IP %s (port %d)\n", getIP(uploadSock->addr), getPort(uploadSock->addr));
+					//send file
+					SendFileInfo sendFileInfo;
+					sendFileInfo.path=tok[2];
+					sendFileInfo.clientSock=*uploadSock;
+					pthread_create(&tid, NULL, &sendFile, (void *)&sendFileInfo);
+					// system("clear");
+				}
+			}
 			//------------------------------------------------
 			else if(tok[0]=="T"){// tell
 				if(strcmp(recvline, SUCCESS)==0){// user A (server)

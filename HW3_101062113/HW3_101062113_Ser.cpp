@@ -99,59 +99,6 @@ void clearFilelist(){
 	cout<<sql<<endl;
 	sql_exec(sql);
 }
-void init(){
-	int rc, i;
-	char *zErrMsg = NULL;
-	
-	/* Open database */
-	rc = sqlite3_open("hw3.db", &db);
-	if( rc ){
-		fprintf(stderr, "Can't open database: %s\n", sqlite3_errmsg(db));
-		exit(0);
-	}
-	else{
-		fprintf(stdout, "Opened database successfully\n");
-	}
-	/* Create SQL statement */
-   	
-   	// clear filelist table?
-	// DROP TABLE FROM filelist?
-	// clear filelist
-	clearFilelist();
-
-   	// build table
-   	for(i=0;i<TABLE_NUM;i++){
-		rc=sqlite3_exec(db, create_sql[i], 0, 0, &zErrMsg);
-		if(rc!=SQLITE_OK){
-			fprintf(stderr, "SQL error: %s\n", zErrMsg);
-      		sqlite3_free(zErrMsg);
-		}else{
-			fprintf(stdout, "Records created successfully\n");
-		}
-	}
-	// account for server
-	insertUser("server", "root");
-	showDB();
-
-}
-void deleteUser(Account acc){
-	string sql="DELETE FROM user WHERE ID='"+acc.ID+"' AND pw='"+acc.pw+"';";
-	sql_exec(sql);
-	showResult();// print nothing
-}
-int login(Account acc){
-	
-	string sql="SELECT * FROM user WHERE ID='"+acc.ID+"' AND pw='"+acc.pw+"';";
-	cout<<sql<<endl;
-	sql_exec(sql);
-	if(result.size()){
-		showResult();
-		return 1;
-	}
-	return 0;
-}
-
-
 void showFilelist(){
 	string sql="SELECT * FROM filelist;";
 	cout<<sql<<endl;
@@ -192,6 +139,62 @@ void recvFilelist(int connfd, string ID){
 		addFile(ID, recvline);
 	}
 }
+//------------------------------------------------
+void init(){
+	int rc, i;
+	char *zErrMsg = NULL;
+	
+	/* Open database */
+	rc = sqlite3_open("hw3.db", &db);
+	if( rc ){
+		fprintf(stderr, "Can't open database: %s\n", sqlite3_errmsg(db));
+		exit(0);
+	}
+	else{
+		fprintf(stdout, "Opened database successfully\n");
+	}
+	/* Create SQL statement */
+   	
+   	// clear filelist table?
+	// DROP TABLE FROM filelist?
+	// clear filelist
+	clearFilelist();
+
+   	// build table
+   	for(i=0;i<TABLE_NUM;i++){
+		rc=sqlite3_exec(db, create_sql[i], 0, 0, &zErrMsg);
+		if(rc!=SQLITE_OK){
+			fprintf(stderr, "SQL error: %s\n", zErrMsg);
+      		sqlite3_free(zErrMsg);
+		}else{
+			fprintf(stdout, "Records created successfully\n");
+		}
+	}
+	// account for server
+	insertUser("server", "root");
+	showDB();
+
+}
+void deleteUser(Account acc){
+	string sql="DELETE FROM user WHERE ID='"+acc.ID+"' AND pw='"+acc.pw+"';";
+	sql_exec(sql);
+	showResult();// print nothing
+	// del file
+	deleteFile(acc.ID);
+}
+int login(Account acc){
+	
+	string sql="SELECT * FROM user WHERE ID='"+acc.ID+"' AND pw='"+acc.pw+"';";
+	cout<<sql<<endl;
+	sql_exec(sql);
+	if(result.size()){
+		showResult();
+		return 1;
+	}
+	return 0;
+}
+
+
 //------------------------------------------------
 void sendResult(int connfd, int scale, vector<map<string, string> > result){
 	char recvline[MAXLINE];
@@ -315,7 +318,7 @@ void *run(void *arg){
 					deleteUser(currentUser);// delete in db
 					userAccount.erase(User(getIP(cliaddr), getPort(cliaddr), cliaddr));
 					accountUser.erase(currentUser);
-
+					
 					write(connfd, SUCCESS, strlen(SUCCESS));
 				}
 				else if(tok[0]=="L"){// logout
@@ -323,7 +326,7 @@ void *run(void *arg){
 					puts("Logout");
 					userAccount.erase(User(getIP(cliaddr), getPort(cliaddr), cliaddr));
 					accountUser.erase(currentUser);
-
+					deleteFile(currentUser.ID);
 					write(connfd, SUCCESS, strlen(SUCCESS));
 				}
 			
@@ -342,7 +345,33 @@ void *run(void *arg){
 				}
 				//------------------------------------------------
 				// upload download
+				else if(tok[0]=="D"){// download
+					
+					// update filelist
+				}
+				else if(tok[0]=="U"){// upload
+					writeRecv(connfd, recvline, strlen(recvline));// send to client
+					if(accountUser.find(Account(tok[1]))!=accountUser.end()){
+						userAccount[User(getIP(cliaddr), getPort(cliaddr), cliaddr, connfd)]=currentUser;
+						// to user A
+						write(connfd, SUCCESS, strlen(SUCCESS));
+						User userA=accountUser[currentUser];
+						User userB=accountUser[Account(tok[1])];
+						string str;
+						// to user A
+						recvWrite(connfd, recvline);// tell B connect to "port"
+						// user B
+						str=string(UPLOAD)+" "+userA.IP+" "+recvline+" "+tok[2];
+						write(userB.connfd, str.c_str(), str.length());// tell B :(A's) IP port
 
+						// update B's filelist
+
+					}
+					else{
+						write(connfd, FAIL, strlen(FAIL));
+					}
+					
+				}
 				//------------------------------------------------
 				else if(tok[0]=="T"){// A tell B
 					writeRecv(connfd, recvline, strlen(recvline));// send to client
