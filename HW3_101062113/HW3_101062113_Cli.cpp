@@ -12,8 +12,9 @@ Account me;
 fd_set rset;
 vector<string>tok;
 vector<string> recvBuff, sendBuff;
-void showMsg(){
 
+void showMsg(){
+	system("clear");
 	if(me.state==Init){
 		puts("************* Welcome *****************");
 		puts("[R]egister [L]ogin");
@@ -24,23 +25,56 @@ void showMsg(){
 	else if(me.state==Normal){
 		printf("************* Hello %s *****************\n", me.ID.c_str());
 		puts("[SU]Show User [SF]Show Filelist [D]ownload [U]pload");
-		puts("[C]hat [L]ogout");
+		puts("[T]ell [L]ogout");
 		puts("[Del]eteAccount");// change account?
 		puts("----------------------------------------");
-		puts("[C]hat [User ID]");
+		puts("[T]ell [User ID]");
 		puts("[D]ownload [filename]");
 		puts("[U]pload [User ID] [filename]");
 	}
-	else if(me.state==Chat){
+	else if(me.state==Tell){
 		// show nothing
 		// until EOF
 	}
+}
+void showResult(int connfd){
+	char recvline[MAXLINE];
+	int n=recvWrite(connfd, recvline);
 	
+
+	int totalbytes=atoi(recvline);
 	
+	for(int i=0;i<totalbytes;i++){
+		int totallines=10;
+		n=recvWrite(connfd, recvline);
+		totallines=atoi(recvline);
+		
+		for(int j=0;j<totallines;j++){
+			n=recvWrite(connfd, recvline);
+		
+			if(j%2==0 && totallines>1)printf("%s:", recvline);
+			else puts(recvline);
+			
+		}
+		puts("");
+	
+	}
 }
 void* listenClient(void *arg){
 
 	return NULL;
+}
+
+void sendFilelist(int& connfd){
+	
+	vector<string>filelist=getCurFilelist();
+	string str=toString(filelist.size());
+	writeRecv(connfd, str.c_str(), str.length());
+	for(int i=0;i<filelist.size();i++){
+		str=filelist[i];
+		writeRecv(connfd, str.c_str(), str.length());
+	}
+
 }
 void dg_cli(FILE *fp, int connfd, const struct sockaddr *servaddr, socklen_t servlen) {
 	char sendline[MAXLINE], recvline[MAXLINE + 1], buf[MAXLINE];
@@ -57,20 +91,22 @@ void dg_cli(FILE *fp, int connfd, const struct sockaddr *servaddr, socklen_t ser
 		tok=parse(sendline);
 
 		// recv
-		n=read(connfd, recvline, MAXLINE);
-		recvline[n]=0;
+		n=receive(connfd, recvline);
 		puts("recvline:");
 		puts(recvline);
-		system("clear");
+			
+		
 		recv=recvline;
 		if(me.state==Init){
 			if(strcmp(recvline, SUCCESS)==0){// register or login success
 				me.state=Normal;
 				me.ID=tok[1],me.pw=tok[2];
-				string str="mkdir Client_"+tok[1];
+				string str="mkdir Folder_"+tok[1];
 				system(str.c_str());
-				str="Client_"+tok[1];
+				str="Folder_"+tok[1];
 				chdir(str.c_str());
+				// send filelist
+				sendFilelist(connfd);
 			}
 			// puts(recvline);
 		}
@@ -87,8 +123,38 @@ void dg_cli(FILE *fp, int connfd, const struct sockaddr *servaddr, socklen_t ser
 					puts("logout success");
 				}
 			}
+			//------------------------------------------------
+			// show filelist/ show user
+			else if(tok[0]=="SU"){// show user
+				if(strcmp(recvline, SUCCESS)==0){
+					puts("show users:");
+					showResult(connfd);
+					puts("----------------------------------------");		
+				}
+			}
+			else if(tok[0]=="SF"){// show filelist
+				if(strcmp(recvline, SUCCESS)==0){
+					puts("show filelist:");
+					showResult(connfd);
+					puts("----------------------------------------");		
+				}
+			}
+			//------------------------------------------------
+			// upload download
+
+			//------------------------------------------------
+			
+			else if(tok[0]=="T"){// tell
+				
+				// set TCP connection(write)
+
+				// create a thread to read?
+				// close?
+
+			}
+
 		}
-		else if(me.state==Chat){
+		else if(me.state==Tell){
 
 		}
 		else{
@@ -97,7 +163,9 @@ void dg_cli(FILE *fp, int connfd, const struct sockaddr *servaddr, socklen_t ser
 		showMsg();
 
 	}
+	close(connfd);
 }
+
 int main(int argc, char **argv) {
 	int sockfd;
 	struct sockaddr_in servaddr;
@@ -109,15 +177,7 @@ int main(int argc, char **argv) {
 		SERV_PORT=atoi(argv[2]);
 	}
 	// from hw1 TCP
-	if((sockfd=socket(AF_INET, SOCK_STREAM,0)) < 0) puts("socket error");
-	//ceate an Internet(AF_INET) stream(SOCK_STREAM) socket
-	bzero(&servaddr,sizeof(servaddr)); 
-	//reset address to zero
-	servaddr.sin_family=AF_INET; //IPv4
-	servaddr.sin_port=htons(SERV_PORT);
-	if(inet_pton(AF_INET, argv[1], &servaddr.sin_addr) <= 0)printf("inet_ption error for %s\n", argv[1]);
-	printf("connect to %s %d\n", argv[1], SERV_PORT);
-	if(connect(sockfd, (struct sockaddr *) &servaddr, sizeof(servaddr))<0)puts("connect error");
+	TCPconnect(sockfd, servaddr, argv[1], SERV_PORT);
 
 	
 	// init

@@ -7,8 +7,7 @@ int SERV_PORT=7122;
 // fd_set rset;
 // const int on = 1;
 
-vector<string>tok;
-Account currentUser;
+
 //
 map<User, Account>userAccount;
 map<Account, User>accountUser;
@@ -68,6 +67,7 @@ void showDB(){// show user list at init
 	    printf("\n");
 	}
 }
+//------------------------------------------------
 void showResult(){
 	for(int i=0;i<result.size();i++){
 		for (std::map<string, string>::iterator it=result[i].begin(); it!=result[i].end(); ++it)
@@ -75,6 +75,7 @@ void showResult(){
 
 	}
 }
+
 int insertUser(Account acc){
 	string sql="SELECT * FROM user WHERE ID='"+acc.ID+"';";
 	cout<<sql<<endl;
@@ -88,6 +89,15 @@ int insertUser(Account acc){
 	showResult();
 
 	return 1;
+}
+int insertUser(string ID, string pw){
+	return insertUser(Account(ID, pw));
+}
+//------------------------------------------------
+void clearFilelist(){
+	string sql="DELETE FROM filelist;";
+	cout<<sql<<endl;
+	sql_exec(sql);
 }
 void init(){
 	int rc, i;
@@ -105,8 +115,9 @@ void init(){
 	/* Create SQL statement */
    	
    	// clear filelist table?
-
-	// DROP TABLE FROM filelist
+	// DROP TABLE FROM filelist?
+	// clear filelist
+	clearFilelist();
 
    	// build table
    	for(i=0;i<TABLE_NUM;i++){
@@ -118,7 +129,8 @@ void init(){
 			fprintf(stdout, "Records created successfully\n");
 		}
 	}
-
+	// account for server
+	insertUser("server", "root");
 	showDB();
 
 }
@@ -140,11 +152,102 @@ int login(Account acc){
 }
 
 
+void showFilelist(){
+	string sql="SELECT * FROM filelist;";
+	cout<<sql<<endl;
+	sql_exec(sql);
+}
+int addFile(string ID, string path){
+	string sql="SELECT MAX(fid) FROM filelist;";
+	int fid=0;
+	cout<<sql<<endl;
+	sql_exec(sql);
+	showResult();
+	if(result[0][string("MAX(fid)")]!="NULL")fid=1+atoi(result[0][string("MAX(fid)")].c_str());
+	sql="INSERT INTO filelist (fid,author,path) VALUES('"+toString(fid)+"', '"+ID+"', '"+path+"');";
+	cout<<sql<<endl;
+	sql_exec(sql);
+	showResult();
+	printf("fid = %d\n", fid);
+	return fid;
+}
+void deleteFile(string ID){
+	string sql="DELETE FROM filelist WHERE author='"+ID+"';";
+	cout<<sql<<endl;
+	sql_exec(sql);
+	showResult();
+}
+void initServerFilelist(){
+	vector<string>filelist=getCurFilelist();
+	for(int i=0;i<filelist.size();i++){
+		addFile("server", filelist[i]);
+	}
+}
+void recvFilelist(int connfd, string ID){
+	char recvline[MAXLINE];
+	int n=recvWrite(connfd, recvline);
+	int totallines=atoi(recvline);
+	for(int i=0;i<totallines;i++){
+		n=recvWrite(connfd, recvline);
+		addFile(ID, recvline);
+	}
+}
+//------------------------------------------------
+void sendResult(int connfd, int scale, vector<map<string, string> > result){
+	char recvline[MAXLINE];
+	string str=toString(result.size());
+	writeRecv(connfd, str.c_str(), str.length());
+
+	for(int i=0;i<result.size();i++){
+		str=toString(result[i].size()*scale);
+		writeRecv(connfd, str.c_str(), str.length());
+
+		for (std::map<string, string>::iterator it=result[i].begin(); it!=result[i].end(); ++it){
+			writeRecv(connfd, it->first.c_str(), it->first.length());
+			writeRecv(connfd, it->second.c_str(), it->second.length());
+		}
+	}
+}
+//------------------------------------------------
+void sendUser(int connfd){
+	string str=toString(accountUser.size());
+	writeRecv(connfd, str.c_str(), str.length());cout<<str;
+	
+			
+	for (std::map<Account, User>::iterator it=accountUser.begin(); it!=accountUser.end(); ++it){
+		str=toString(3*2);// ID IP port
+		writeRecv(connfd, str.c_str(), str.length());
+		
+		
+		str="ID";
+		writeRecv(connfd, str.c_str(), str.length());
+		
+		str=it->first.ID;
+		writeRecv(connfd, str.c_str(), str.length());
+		
+		
+		str="IP";
+		writeRecv(connfd, str.c_str(), str.length());
+		
+		str=it->second.IP;
+		writeRecv(connfd, str.c_str(), str.length());
+		
+		str="port";
+		writeRecv(connfd, str.c_str(), str.length());
+
+		str=toString(it->second.port);
+		writeRecv(connfd, str.c_str(), str.length());
+		
+	}
+}
+
+
 void *run(void *arg){
 	pthread_detach(pthread_self());
+	vector<string>tok;
+	Account currentUser;
 	int n;
 	char  mesg[MAXLINE], sendline[MAXLINE], recvline[MAXLINE];
-	vector<string>tok;
 	ClientSock clientSock=*(ClientSock*)arg;
 	int connfd=clientSock.connfd;
 	struct sockaddr_in cliaddr=clientSock.cliaddr;
@@ -168,6 +271,9 @@ void *run(void *arg){
 					write(connfd, SUCCESS, strlen(SUCCESS));
 
 					// update filelist
+					recvFilelist(connfd, currentUser.ID);
+
+
 				}
 				else{
 					puts("register fail");
@@ -184,6 +290,8 @@ void *run(void *arg){
 					puts("login sucess");
 					write(connfd, SUCCESS, strlen(SUCCESS));	
 					// update filelist
+					recvFilelist(connfd, currentUser.ID);
+
 				}
 				else{
 					puts("login fail");
@@ -212,6 +320,31 @@ void *run(void *arg){
 				}
 			
 				//------------------------------------------------
+				// show filelist/ show user
+				else if(tok[0]=="SU"){// show user
+					writeWithSleep(connfd, SUCCESS, strlen(SUCCESS));
+					sendUser(connfd);
+				}
+				else if(tok[0]=="SF"){// show filelist
+					writeWithSleep(connfd, SUCCESS, strlen(SUCCESS));
+					showFilelist();
+					sendResult(connfd, 2, result);
+				}
+				//------------------------------------------------
+				// upload download
+
+				//------------------------------------------------
+				else if(tok[0]=="T"){// tell
+					if(accountUser.find(Account(tok[1]))!=accountUser.end()){
+						User usr=accountUser[Account(tok[1])];
+						writeWithSleep(connfd, SUCCESS, strlen(SUCCESS));
+						string str=usr.IP+" "+toString(usr.port);
+						writeWithSleep(connfd, str.c_str(), str.length());
+
+					}
+					
+				}
+			
 			}				
 		}
 		puts(recvline);
@@ -219,7 +352,7 @@ void *run(void *arg){
 		
 		// write(connfd, recvline, strlen(recvline));
 	}
-
+	close(connfd);
 
 	return NULL;
 }
@@ -239,19 +372,16 @@ int main(int argc, char **argv) {
 	userAccount.clear();
 	accountUser.clear();
 
-	system("mkdir Upload");
-	chdir("Upload");
+	system("mkdir Folder_server");
+	chdir("Folder_server");
+	// server filelist
+	initServerFilelist();
+
 	userAccount.clear();
 	accountUser.clear();
 	SERV_PORT=argc>1?atoi(argv[1]):7122;
 	// TCP 
-	listenid=socket(AF_INET, SOCK_STREAM,0);
-	bzero(&servaddr, sizeof(servaddr));
-	servaddr.sin_family=AF_INET;
-	servaddr.sin_addr.s_addr=htonl(INADDR_ANY);
-	servaddr.sin_port=htons(SERV_PORT);
-	bind(listenid, (struct sockaddr *)&servaddr, sizeof(servaddr));
-	listen(listenid, LISTENQ); /*LISTENQ=1024*/
+	TCPlisten(listenid, connfd, servaddr, SERV_PORT);
 	
 
 	while(1){
