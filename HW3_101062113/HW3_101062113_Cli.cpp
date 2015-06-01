@@ -1,8 +1,8 @@
 #include "header.h"
 
-int SERV_PORT=7122;
+int SERV_PORT=7122, CLI_PORT;
 // struct timeval timeout;
-// int WaitingAck;
+
 Account me;
 // int isCurrentAuthor;// current author
 
@@ -38,17 +38,64 @@ void showMsg(){
 	
 	
 }
+void* listenClient(void *arg){
 
+	return NULL;
+}
 void dg_cli(FILE *fp, int connfd, const struct sockaddr *servaddr, socklen_t servlen) {
 	char sendline[MAXLINE], recvline[MAXLINE + 1], buf[MAXLINE];
 	int n;
-	while(fgets(sendline, MAXLINE-2, stdin)!=NULL){
+	string recv;
+	vector<string>tok;
+	showMsg();
+	while(fgets(sendline, MAXLINE, stdin)!=NULL){
 		sendline[strlen(sendline)-1]='\0';// remove '\n'
-		// puts(sendline);
+		puts("sendline:");
+		puts(sendline);
 		write(connfd, sendline, strlen(sendline));
+		tok.clear();
+		tok=parse(sendline);
+
+		// recv
 		n=read(connfd, recvline, MAXLINE);
 		recvline[n]=0;
+		puts("recvline:");
 		puts(recvline);
+		system("clear");
+		recv=recvline;
+		if(me.state==Init){
+			if(strcmp(recvline, SUCCESS)==0){// register or login success
+				me.state=Normal;
+				me.ID=tok[1],me.pw=tok[2];
+				string str="mkdir Client_"+tok[1];
+				system(str.c_str());
+				str="Client_"+tok[1];
+				chdir(str.c_str());
+			}
+			// puts(recvline);
+		}
+		else if(me.state==Normal){
+			if(tok[0]=="Del"){// delete account
+				if(strcmp(recvline, SUCCESS)==0){
+					me.state=Init;
+					puts("delete success");
+				}
+			}
+			else if(tok[0]=="L"){// logout
+				if(strcmp(recvline, SUCCESS)==0){
+					me.state=Init;
+					puts("logout success");
+				}
+			}
+		}
+		else if(me.state==Chat){
+
+		}
+		else{
+
+		}
+		showMsg();
+
 	}
 }
 int main(int argc, char **argv) {
@@ -73,8 +120,10 @@ int main(int argc, char **argv) {
 	if(connect(sockfd, (struct sockaddr *) &servaddr, sizeof(servaddr))<0)puts("connect error");
 
 	
-	// WaitingAck=0;
-	// 
+	// init
+	me.state=Init;
+
+	 
 	dg_cli(stdin, sockfd, (struct sockaddr *) &servaddr, sizeof(servaddr));
 	exit(0);
 

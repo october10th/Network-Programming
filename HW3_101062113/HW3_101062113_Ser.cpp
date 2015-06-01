@@ -75,6 +75,20 @@ void showResult(){
 
 	}
 }
+int insertUser(Account acc){
+	string sql="SELECT * FROM user WHERE ID='"+acc.ID+"';";
+	cout<<sql<<endl;
+	sql_exec(sql);
+	if(result.size()){
+		showResult();
+		return 0;
+	}
+	sql="INSERT INTO user (ID, pw) VALUES('"+acc.ID+"', '"+acc.pw+"');";
+	sql_exec(sql);
+	showResult();
+
+	return 1;
+}
 void init(){
 	int rc, i;
 	char *zErrMsg = NULL;
@@ -108,23 +122,102 @@ void init(){
 	showDB();
 
 }
+void deleteUser(Account acc){
+	string sql="DELETE FROM user WHERE ID='"+acc.ID+"' AND pw='"+acc.pw+"';";
+	sql_exec(sql);
+	showResult();// print nothing
+}
+int login(Account acc){
+	
+	string sql="SELECT * FROM user WHERE ID='"+acc.ID+"' AND pw='"+acc.pw+"';";
+	cout<<sql<<endl;
+	sql_exec(sql);
+	if(result.size()){
+		showResult();
+		return 1;
+	}
+	return 0;
+}
+
 
 void *run(void *arg){
+	pthread_detach(pthread_self());
 	int n;
 	char  mesg[MAXLINE], sendline[MAXLINE], recvline[MAXLINE];
-	pthread_detach(pthread_self());
+	vector<string>tok;
 	ClientSock clientSock=*(ClientSock*)arg;
-	free(arg);
 	int connfd=clientSock.connfd;
+	struct sockaddr_in cliaddr=clientSock.cliaddr;
+	free(arg);
 
 	while((n=read(connfd, recvline, MAXLINE)) >0) {
 
 		recvline[n]=0; /* null terminate */
-		puts("from client");
+		printf("from client IP %s port %d\n", getIP(cliaddr), getPort(cliaddr));
+		tok.clear();
+		tok=parse(recvline);
+		if(userAccount.find(User(getIP(cliaddr), getPort(cliaddr), cliaddr))==userAccount.end()){
+			if(tok[0][0]=='R'){
+				//register
+				currentUser=Account(tok[1], tok[2]);
+				currentUser.state=Normal;
+				userAccount[User(getIP(cliaddr), getPort(cliaddr), cliaddr)]=currentUser;
+				accountUser[currentUser]=User(getIP(cliaddr), getPort(cliaddr), cliaddr);
+				if(insertUser(currentUser)){
+					puts("register sucess");
+					write(connfd, SUCCESS, strlen(SUCCESS));
+
+					// update filelist
+				}
+				else{
+					puts("register fail");
+
+					write(connfd, FAIL, strlen(FAIL));
+				}
+			}
+			else if(tok[0][0]=='L'){
+				if(login(Account(tok[1], tok[2]))){
+					currentUser=Account(tok[1], tok[2]);
+					currentUser.state=Normal;
+					userAccount[User(getIP(cliaddr), getPort(cliaddr), cliaddr)]=currentUser;
+					accountUser[currentUser]=User(getIP(cliaddr), getPort(cliaddr), cliaddr);
+					puts("login sucess");
+					write(connfd, SUCCESS, strlen(SUCCESS));	
+					// update filelist
+				}
+				else{
+					puts("login fail");
+					write(connfd, FAIL, strlen(FAIL));
+				}
+			}
+		}
+		else{ // login already
+			currentUser=userAccount[User(getIP(cliaddr), getPort(cliaddr), cliaddr)];
+			accountUser[currentUser]=User(getIP(cliaddr), getPort(cliaddr), cliaddr);
+			if(currentUser.state==Normal){
+				if(tok[0]=="Del"){// delete account
+					puts("Delete account");
+					deleteUser(currentUser);// delete in db
+					userAccount.erase(User(getIP(cliaddr), getPort(cliaddr), cliaddr));
+					accountUser.erase(currentUser);
+
+					write(connfd, SUCCESS, strlen(SUCCESS));
+				}
+				else if(tok[0]=="L"){// logout
+					puts("Logout");
+					userAccount.erase(User(getIP(cliaddr), getPort(cliaddr), cliaddr));
+					accountUser.erase(currentUser);
+
+					write(connfd, SUCCESS, strlen(SUCCESS));
+				}
+			
+				//------------------------------------------------
+			}				
+		}
 		puts(recvline);
 		
 		
-		write(connfd, recvline, strlen(recvline));
+		// write(connfd, recvline, strlen(recvline));
 	}
 
 
@@ -143,6 +236,9 @@ int main(int argc, char **argv) {
 	struct sockaddr_in cliaddr, servaddr;
 
 	init();
+	userAccount.clear();
+	accountUser.clear();
+
 	system("mkdir Upload");
 	chdir("Upload");
 	userAccount.clear();
@@ -165,7 +261,7 @@ int main(int argc, char **argv) {
 		cliSock->connfd = accept(listenid, (struct sockaddr*)&(cliSock->cliaddr), &clilen);
 		printf("TCP connect from IP %s (port %d)\n", getIP(cliSock->cliaddr), getPort(cliSock->cliaddr));
 		pthread_create(&tid, NULL, &run, (void *)cliSock);
-	}	
+	}
 
 
 	sqlite3_close(db);
