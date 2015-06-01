@@ -155,7 +155,9 @@ void *sendFile(void *arg){
     }
     usleep(1000);
 	fclose(fin);
+	system("clear");
     printf("finished: sended %d bytes\n", totalbytes);
+    showMsg();
 	return NULL;
 }
 void *downloadFile(void *arg){
@@ -185,7 +187,9 @@ void *downloadFile(void *arg){
     }
     usleep(1000);
 	fclose(fout);
+	system("clear");
     printf("finished: downloaded %d bytes (%d)\n", currentbyte, totalbytes);
+    showMsg();
 	return NULL;
 }
 void *downloadManyFile(void *arg){
@@ -209,7 +213,7 @@ void str_cli(int connfd, sockaddr_in servaddr) {
 		
 		vector<string>tok;
 		tok.clear();
-		// Upload
+		// Upload (client)
 		if(strncmp(recvline, UPLOAD, strlen(UPLOAD))==0){
 
 			puts("upload~~~!!!");
@@ -223,7 +227,7 @@ void str_cli(int connfd, sockaddr_in servaddr) {
 			sendFileInfo.clientSock=*uploadSock;
 			pthread_create(&tid, NULL, &downloadFile, (void *)&sendFileInfo);
 
-			// system("clear");
+
 			continue;
 		}
 		// Tell
