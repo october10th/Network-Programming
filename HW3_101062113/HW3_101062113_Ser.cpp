@@ -250,22 +250,27 @@ void *run(void *arg){
 	char  mesg[MAXLINE], sendline[MAXLINE], recvline[MAXLINE];
 	ClientSock clientSock=*(ClientSock*)arg;
 	int connfd=clientSock.connfd;
-	struct sockaddr_in cliaddr=clientSock.cliaddr;
+	struct sockaddr_in cliaddr=clientSock.addr;
 	free(arg);
 
-	while((n=read(connfd, recvline, MAXLINE)) >0) {
+	while((n=receive(connfd, recvline)) >0) {
 
 		recvline[n]=0; /* null terminate */
 		printf("from client IP %s port %d\n", getIP(cliaddr), getPort(cliaddr));
+		printf("connfd = %d\n", connfd);
 		tok.clear();
 		tok=parse(recvline);
+		
+
 		if(userAccount.find(User(getIP(cliaddr), getPort(cliaddr), cliaddr))==userAccount.end()){
 			if(tok[0][0]=='R'){
+				writeRecv(connfd, recvline, strlen(recvline));// send to client
 				//register
 				currentUser=Account(tok[1], tok[2]);
 				currentUser.state=Normal;
-				userAccount[User(getIP(cliaddr), getPort(cliaddr), cliaddr)]=currentUser;
-				accountUser[currentUser]=User(getIP(cliaddr), getPort(cliaddr), cliaddr);
+				userAccount[User(getIP(cliaddr), getPort(cliaddr), cliaddr, connfd)]=currentUser;
+				accountUser[currentUser]=User(getIP(cliaddr), getPort(cliaddr), cliaddr, connfd);
+				
 				if(insertUser(currentUser)){
 					puts("register sucess");
 					write(connfd, SUCCESS, strlen(SUCCESS));
@@ -282,11 +287,12 @@ void *run(void *arg){
 				}
 			}
 			else if(tok[0][0]=='L'){
+				writeRecv(connfd, recvline, strlen(recvline));// send to client
 				if(login(Account(tok[1], tok[2]))){
 					currentUser=Account(tok[1], tok[2]);
 					currentUser.state=Normal;
-					userAccount[User(getIP(cliaddr), getPort(cliaddr), cliaddr)]=currentUser;
-					accountUser[currentUser]=User(getIP(cliaddr), getPort(cliaddr), cliaddr);
+					userAccount[User(getIP(cliaddr), getPort(cliaddr), cliaddr, connfd)]=currentUser;
+					accountUser[currentUser]=User(getIP(cliaddr), getPort(cliaddr), cliaddr, connfd);
 					puts("login sucess");
 					write(connfd, SUCCESS, strlen(SUCCESS));	
 					// update filelist
@@ -304,6 +310,7 @@ void *run(void *arg){
 			accountUser[currentUser]=User(getIP(cliaddr), getPort(cliaddr), cliaddr);
 			if(currentUser.state==Normal){
 				if(tok[0]=="Del"){// delete account
+					writeRecv(connfd, recvline, strlen(recvline));// send to client
 					puts("Delete account");
 					deleteUser(currentUser);// delete in db
 					userAccount.erase(User(getIP(cliaddr), getPort(cliaddr), cliaddr));
@@ -312,6 +319,7 @@ void *run(void *arg){
 					write(connfd, SUCCESS, strlen(SUCCESS));
 				}
 				else if(tok[0]=="L"){// logout
+					writeRecv(connfd, recvline, strlen(recvline));// send to client
 					puts("Logout");
 					userAccount.erase(User(getIP(cliaddr), getPort(cliaddr), cliaddr));
 					accountUser.erase(currentUser);
@@ -322,11 +330,13 @@ void *run(void *arg){
 				//------------------------------------------------
 				// show filelist/ show user
 				else if(tok[0]=="SU"){// show user
-					writeWithSleep(connfd, SUCCESS, strlen(SUCCESS));
+					writeRecv(connfd, recvline, strlen(recvline));// send to client
+					writeRecv(connfd, SUCCESS, strlen(SUCCESS));
 					sendUser(connfd);
 				}
 				else if(tok[0]=="SF"){// show filelist
-					writeWithSleep(connfd, SUCCESS, strlen(SUCCESS));
+					writeRecv(connfd, recvline, strlen(recvline));// send to client
+					writeRecv(connfd, SUCCESS, strlen(SUCCESS));
 					showFilelist();
 					sendResult(connfd, 2, result);
 				}
@@ -334,12 +344,24 @@ void *run(void *arg){
 				// upload download
 
 				//------------------------------------------------
-				else if(tok[0]=="T"){// tell
+				else if(tok[0]=="T"){// A tell B
+					writeRecv(connfd, recvline, strlen(recvline));// send to client
 					if(accountUser.find(Account(tok[1]))!=accountUser.end()){
-						User usr=accountUser[Account(tok[1])];
-						writeWithSleep(connfd, SUCCESS, strlen(SUCCESS));
-						string str=usr.IP+" "+toString(usr.port);
-						writeWithSleep(connfd, str.c_str(), str.length());
+						User userA=accountUser[currentUser];
+						User userB=accountUser[Account(tok[1])];
+						string str;
+						// to user A
+						write(connfd, SUCCESS, strlen(SUCCESS));
+						recvWrite(connfd, recvline);// tell B connect to "port"
+						// user B
+						printf("user B connfd = %d\n", userB.connfd);
+						writeRecv(userB.connfd, TALK, strlen(TALK));
+						str=userA.IP+" "+recvline;
+						cout<<"tell user "+str<<endl;
+						writeRecv(userB.connfd, str.c_str(), str.length());// tell B :(A's) IP port
+
+						// string str=userB.IP+" "+toString(userB.port);
+						// writeWithSleep(connfd, str.c_str(), str.length());
 
 					}
 					
@@ -365,8 +387,8 @@ int main(int argc, char **argv) {
 	int listenid, connfd;
 
 	ssize_t n;
-	socklen_t len;
-	struct sockaddr_in cliaddr, servaddr;
+	// socklen_t len;
+	struct sockaddr_in servaddr;
 
 	init();
 	userAccount.clear();
@@ -385,12 +407,12 @@ int main(int argc, char **argv) {
 	
 
 	while(1){
-		ClientSock * cliSock; 
-		cliSock = (ClientSock*)malloc(sizeof(ClientSock));
-		socklen_t clilen = sizeof(cliSock->cliaddr);
-		cliSock->connfd = accept(listenid, (struct sockaddr*)&(cliSock->cliaddr), &clilen);
-		printf("TCP connect from IP %s (port %d)\n", getIP(cliSock->cliaddr), getPort(cliSock->cliaddr));
-		pthread_create(&tid, NULL, &run, (void *)cliSock);
+		ClientSock * clientSock; 
+		clientSock = (ClientSock*)malloc(sizeof(ClientSock));
+		socklen_t clilen = sizeof(clientSock->addr);
+		clientSock->connfd = accept(listenid, (struct sockaddr*)&(clientSock->addr), &clilen);
+		printf("TCP connect from IP %s (port %d)\n", getIP(clientSock->addr), getPort(clientSock->addr));
+		pthread_create(&tid, NULL, &run, (void *)clientSock);
 	}
 
 

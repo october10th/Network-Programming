@@ -40,16 +40,29 @@ struct User{
 	string IP;
 	int port;
 	struct sockaddr_in cliaddr;
+	int connfd;
 	User(){}
 	User(const char _IP[], int _port, struct sockaddr_in _cliaddr){
 		IP=_IP;
 		port=_port;
 		cliaddr=_cliaddr;
 	}
+	User(const char _IP[], int _port, struct sockaddr_in _cliaddr, int _connfd){
+		IP=_IP;
+		port=_port;
+		cliaddr=_cliaddr;
+		connfd=_connfd;
+	}
 	User(string _IP, int _port, struct sockaddr_in _cliaddr){
 		IP=_IP;
 		port=_port;
 		cliaddr=_cliaddr;
+	}
+	User(string _IP, int _port, struct sockaddr_in _cliaddr, int _connfd){
+		IP=_IP;
+		port=_port;
+		cliaddr=_cliaddr;
+		connfd=_connfd;
 	}
 	void setCliaddr(struct sockaddr_in _cliaddr){
 		cliaddr=_cliaddr;
@@ -78,12 +91,13 @@ struct Account{
 };
 struct ClientSock{
 	int connfd;
-	struct sockaddr_in cliaddr;
+	struct sockaddr_in addr;
 };
 typedef struct sockaddr SA;
 const char ACK[]="ACK";
 const char SUCCESS[]="Success!";
 const char FAIL[]="Fail!";
+const char TALK[]="TALK$#@#$@#$########";
 const int TABLE_NUM=2;
 const char create_sql[TABLE_NUM][512]={
 	"CREATE TABLE user(ID VARCHAR(64) PRIMARY KEY, pw VARCHAR(64));",
@@ -104,8 +118,12 @@ string toString(int a){
 	sprintf(str, "%d", a);
 	return string(str);
 }
-
-
+int random(int a, int b){// a <= x < b
+	return a+rand()%(b-a);
+}
+int getRandPort(){
+	return random(8000, 10000);
+}
 int receive(int connfd, char recvline[]){
 	int n;
 	n=read(connfd, recvline, MAXLINE);
