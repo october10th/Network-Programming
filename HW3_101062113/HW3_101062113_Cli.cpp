@@ -14,7 +14,7 @@ vector<string>tok;
 vector<string> recvBuff, sendBuff;
 
 void showMsg(){
-	system("clear");
+
 	if(me.state==Init){
 		puts("************* Welcome *****************");
 		puts("[R]egister [L]ogin");
@@ -90,11 +90,13 @@ void dg_cli(FILE *fp, int connfd, const struct sockaddr *servaddr, socklen_t ser
 		tok.clear();
 		tok=parse(sendline);
 
+		system("clear");
+		
 		// recv
 		n=receive(connfd, recvline);
 		puts("recvline:");
 		puts(recvline);
-			
+		
 		
 		recv=recvline;
 		if(me.state==Init){
