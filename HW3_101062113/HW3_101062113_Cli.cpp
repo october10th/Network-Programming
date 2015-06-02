@@ -95,6 +95,7 @@ void *writer(void*arg){
 				// me.state=Normal;
 				writeWithSleep(clientSock->connfd, EXIT, strlen(EXIT));// to client
 				// close(clientSock->connfd);
+				// shutdown(clientSock->connfd, SHUT_WR);
 				*clientSock=tmpClientSock;
 				printf("back to %s %d\n", getIP(clientSock->addr), getPort(clientSock->addr));
 				// writeWithSleep(clientSock->connfd, EXIT, strlen(EXIT));// to server
@@ -267,7 +268,7 @@ void *sendDivideFile(void *arg){
     printf("finished: sended %d bytes\n", totalbytes);
     showMsg();
 	// idx 
-	shutdown(connfd, SHUT_WR);
+	// shutdown(connfd, SHUT_WR);
 	return NULL;
 }
 
@@ -349,7 +350,9 @@ void str_cli(int connfd, sockaddr_in servaddr) {
 	
 	ClientSock tmpClientSock=*clientSock;
 	pthread_create(&tid, NULL, &writer, (void *)clientSock);
+	again:
 	while((n=receive(clientSock->connfd, recvline))>0){
+
 		
 		vector<string>tok;
 		tok.clear();
@@ -402,6 +405,8 @@ void str_cli(int connfd, sockaddr_in servaddr) {
 				// close(clientSock->connfd);
 				me.state=Normal;
 				writeWithSleep(clientSock->connfd, EXIT, strlen(EXIT));// to client
+				
+				// shutdown(clientSock->connfd, SHUT_WR);
 				*clientSock=tmpClientSock;//connfd=clientSock->connfd;
 				writeWithSleep(clientSock->connfd, EXIT, strlen(EXIT));// to server
 				system("clear");
@@ -613,6 +618,12 @@ void str_cli(int connfd, sockaddr_in servaddr) {
 		}
 		
 
+	}
+	if(n<0&&errno==EINTR){
+		goto again;
+	}
+	else if(n<0){
+		puts("str_cli error");
 	}
 	shutdown(clientSock->connfd, SHUT_WR);
 	// close(clientSock->connfd);

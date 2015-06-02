@@ -140,16 +140,34 @@ int getRandPort(){
 }
 int receive(int connfd, char recvline[]){
 	int n;
+	receive_again:
 	n=read(connfd, recvline, MAXLINE);
 	if(n>=0)
 		recvline[n]=0;
+	
+	if(n<0&&errno==EINTR){
+		goto receive_again;
+	}
+	else if(n<0){
+		puts("receive error");
+	}
+	usleep(1000);
 	return n;
 }
 int recvWrite(int connfd, char recvline[]){
 	int n;
+	recvWrite_again:
 	n=read(connfd, recvline, MAXLINE);
 	if(n>=0)
 		recvline[n]=0;
+	if(n<0&&errno==EINTR){
+		goto recvWrite_again;
+	}
+	else if(n<0){
+		puts("receive error");
+	}
+	usleep(1000);
+
 	write(connfd, OK, strlen(OK));
 	return n;
 }
@@ -160,7 +178,7 @@ void writeRecv(int connfd, const char sendline[], int length){
 	n=read(connfd, recvline, MAXLINE);
 	if(n>=0)recvline[n]=0;
 	// puts(sendline);
-	// usleep(1000);
+	usleep(1000);
 }
 void writeWithSleep(int connfd, const char sendline[], int length){
 	write(connfd, sendline, length);

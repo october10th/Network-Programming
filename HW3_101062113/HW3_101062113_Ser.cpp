@@ -193,7 +193,7 @@ void init(){
 		}
 	}
 	// account for server
-	insertUser("server", "root");
+	// insertUser("server", "root");
 	showDB();
 
 }
@@ -503,7 +503,7 @@ int main(int argc, char **argv) {
 	system("mkdir Folder_server");
 	chdir("Folder_server");
 	// server filelist
-	initServerFilelist();
+	// initServerFilelist();
 
 	userAccount.clear();
 	accountUser.clear();
