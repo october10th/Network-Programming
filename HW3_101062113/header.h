@@ -98,6 +98,11 @@ struct SendFileInfo{
 	ClientSock clientSock;
 	string path;
 };
+struct DivideFileInfo{
+	int idx, totalParts;
+	ClientSock clientSock;
+	string path;
+};
 typedef struct sockaddr SA;
 const char ACK[]="ACK";
 const char SUCCESS[]="Success!";
@@ -105,6 +110,7 @@ const char FAIL[]="Fail!";
 const char OK[]="OK";
 const char TALK[]="TALK$#@#$@#$########";
 const char UPLOAD[]="UPLOAD$#@#$@#$########";
+const char DOWNLOAD[]="DOWNLOAD@#@!@#@&@&##";
 const char EXIT[]="EXIT";
 const int TABLE_NUM=2;
 const char create_sql[TABLE_NUM][512]={

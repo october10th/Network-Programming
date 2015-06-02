@@ -78,19 +78,7 @@ void sendFilelist(int connfd){
 	}
 
 }
-// void *reader(void*arg){
-// 	pthread_detach(pthread_self());
-// 	int n;
-// 	char recvline[MAXLINE];
-// 	ClientSock clientSock=*(ClientSock*)arg;
-// 	int connfd=clientSock.connfd;
-// 	while((n=read(connfd, recvline, MAXLINE)) >0) {
 
-// 		recvline[n]=0;
-// 		puts(recvline);
-// 	}
-// 	return NULL;
-// }
 
 void *writer(void*arg){
 	pthread_detach(pthread_self());
@@ -160,12 +148,24 @@ void *sendFile(void *arg){
     showMsg();
 	return NULL;
 }
+int getSendBytes(int idx, int total, int bytes){
+	if(idx!=total-1){
+		return bytes/total;
+	}
+	else{
+		return bytes/total+bytes%total;
+	}
+}
+int getStartBytes(int idx, int total, int bytes){
+	return bytes/total*idx;
+}
 void *downloadFile(void *arg){
 	pthread_detach(pthread_self());
+
 	SendFileInfo sendFileInfo=*(SendFileInfo*)arg;
 	int connfd=sendFileInfo.clientSock.connfd;
 	FILE *fout=fopen(sendFileInfo.path.c_str(), "wb");
-
+	printf("download file from IP %s port %d connfd %d\n", getIP(sendFileInfo.clientSock.addr), getPort(sendFileInfo.clientSock.addr), sendFileInfo.clientSock.connfd);
 	char recvline[MAXLINE];
 
 	if(!fout){
@@ -192,10 +192,150 @@ void *downloadFile(void *arg){
     showMsg();
 	return NULL;
 }
-void *downloadManyFile(void *arg){
-	//FILE ab? 
-	// or one time???
+
+void *sendDivideFile(void *arg){
+	pthread_detach(pthread_self());
+	DivideFileInfo divideFileInfo=*(DivideFileInfo*)arg;;
+
+	// 		divideFileInfoInfo.path=tok[3];
+	// 		divideFileInfoInfo.clientSock=*uploadSock;
+	// 		divideFileInfo.idx=atoi(tok[4].c_str());
+	// 		divideFileInfo.totalParts=atoi(tok[5].c_str());
+	// SendFileInfo sendFileInfo=*(SendFileInfo*)arg;
+	
+	int connfd=divideFileInfo.clientSock.connfd;
+	string filename=divideFileInfo.path;
+	FILE *fin=fopen(filename.c_str(), "rb");
+	struct stat filestat;
+	char sendline[MAXLINE];
+	string str;
+	printf("send divide file : %s\n", filename.c_str());
+
+	if(!fin){
+		write(connfd, toString(0).c_str(), toString(0).length());
+		return NULL;
+	}
+	
+	lstat(filename.c_str(), &filestat);
+	printf("start sending (%d bytes)\n", (int)filestat.st_size);
+	int totalbytes=(int)filestat.st_size;
+	int start=getStartBytes(divideFileInfo.idx, divideFileInfo.totalParts, totalbytes);
+	int end=start+getSendBytes(divideFileInfo.idx, divideFileInfo.totalParts, totalbytes);
+
+	// idx / total parts / total bytes
+	str=toString(divideFileInfo.idx)+" "+toString(divideFileInfo.totalParts)+" "+toString((int)filestat.st_size);
+	cout<<"addr: "<<getIP(divideFileInfo.clientSock.addr)<<" port: "<<getPort(divideFileInfo.clientSock.addr)<<" confd: "<<divideFileInfo.clientSock.connfd<<endl;
+	cout<<"writeRecv(idx/totalParts/totalbytes): "<<str<<endl;
+	writeRecv(connfd, str.c_str(), str.length());
+
+	usleep(100);
+	int sendbytes, currentbyte=0;
+	printf("start = %d end = %d end-start = %d\n", start, end, end-start);
+	while (!feof(fin)) {
+
+		sendbytes=fread(sendline, sizeof(char), sizeof(sendline), fin);
+		
+		// send
+		if(currentbyte+sendbytes>=start && currentbyte<end){
+			if(currentbyte<start && currentbyte+sendbytes>=end){
+				printf("[%d] sendbytes %d (%d)\n", divideFileInfo.idx, end-start, currentbyte);
+        		writeRecv(connfd, &sendline[start-currentbyte], end-start);
+			}
+			else if(currentbyte<start){
+				printf("[%d] sendbytes %d (%d)\n", divideFileInfo.idx, currentbyte+sendbytes-start, currentbyte);
+        		writeRecv(connfd, &sendline[start-currentbyte], currentbyte+sendbytes-start);	
+			}
+			else if(currentbyte+sendbytes<end){
+				printf("[%d] sendbytes %d at (%d)\n", divideFileInfo.idx, sendbytes, currentbyte);
+        		writeRecv(connfd, sendline, sendbytes);	
+			}
+			else{
+				printf("[%d] sendbytes %d at (%d)\n", divideFileInfo.idx, end-currentbyte, currentbyte);
+        		writeRecv(connfd, sendline, end-currentbyte);
+			}
+			
+		}
+		// discard
+		else{
+
+		}
+        currentbyte+=sendbytes;
+    }
+    usleep(1000);
+	fclose(fin);
+	system("clear");
+    printf("finished: sended %d bytes\n", totalbytes);
+    showMsg();
+	// idx 
+	shutdown(connfd, SHUT_WR);
 	return NULL;
+}
+
+void *downloadDivideFile(void *arg){
+	// pthread_detach(pthread_self());
+	
+	DivideFileInfo sendFileInfo=*(DivideFileInfo*)arg;
+	int connfd=sendFileInfo.clientSock.connfd;
+
+	printf("download from IP %s port %d connfd %d\n", getIP(sendFileInfo.clientSock.addr), getPort(sendFileInfo.clientSock.addr), sendFileInfo.clientSock.connfd);
+	char recvline[MAXLINE];
+
+	puts("start download Divide file:");
+	// idx / total parts / total bytes
+	recvWrite(connfd,recvline);
+	puts(recvline);
+	vector<string>tok=parse(recvline);
+	usleep(100);
+	int sendbytes, totalbytes=atoi(tok[2].c_str()), currentbyte=0, idx=atoi(tok[0].c_str()), totalParts=atoi(tok[1].c_str());
+	int start=getStartBytes(idx, totalParts, totalbytes);
+	int end=start+getSendBytes(idx, totalParts, totalbytes);
+	int goingtosend=end-start;
+	printf("start = %d end = %d goingtosend = %d\n", start, end, goingtosend);
+	string filename="tmp/"+sendFileInfo.path+"_"+toString(idx);
+	FILE *fout=fopen(filename.c_str(), "wb");
+	if(!fout){
+		// receive(connfd, recvline);
+		return NULL;
+	}
+	while (currentbyte<goingtosend) {
+		sendbytes=recvWrite(connfd, recvline);
+		fwrite(recvline, sizeof(char), sendbytes, fout);
+        printf("[%d] sendbytes %d (%d/%d)\n", idx, sendbytes, currentbyte, totalbytes);
+        
+        currentbyte+=sendbytes;
+
+    }
+    usleep(1000);
+	fclose(fout);
+	system("clear");
+    printf("finished: downloaded %d bytes (%d)\n", currentbyte, totalbytes);
+    showMsg();
+	return NULL;
+}
+void mergeDivideFile(string filename, int totalParts){
+	FILE *fin, *fout;
+	char sendline[MAXLINE];
+
+	fout=fopen(filename.c_str(), "wb");
+	for(int i=0;i<totalParts;i++){
+		string str="tmp/"+filename+"_"+toString(i);
+		fin=fopen(str.c_str(), "rb");
+		if(!fin){
+			printf("no file %d\n", i);
+			i--;continue;
+		}
+		int recvbytes=0;
+		while (!feof(fin)) {
+			int sendbytes=fread(sendline, sizeof(char), sizeof(sendline), fin);
+			fwrite(sendline, sizeof(char), sendbytes, fout);
+			// printf("[%d] write %d\n", i, sendbytes);
+			recvbytes+=sendbytes;
+		}
+		printf("[%d] write %d\n", i, recvbytes);
+		fclose(fin);
+	}
+	// system("rm -r tmp");
+	fclose(fout);
 }
 void str_cli(int connfd, sockaddr_in servaddr) {
 	showMsg();
@@ -230,6 +370,32 @@ void str_cli(int connfd, sockaddr_in servaddr) {
 
 			continue;
 		}
+		if(strncmp(recvline, DOWNLOAD, strlen(DOWNLOAD))==0){
+
+			puts("download~~~!!!");
+			puts(recvline);
+			tok=parse(recvline);
+			pthread_t tid;
+			ClientSock * uploadSock=(ClientSock*)malloc(sizeof(ClientSock));
+			printf("before IP %s port %d connfd %d\n", getIP(clientSock->addr), getPort(clientSock->addr), clientSock->connfd);
+			
+			TCPconnect(uploadSock->connfd, uploadSock->addr, tok[1].c_str(), atoi(tok[2].c_str()));
+			printf("after IP %s port %d connfd %d\n", getIP(uploadSock->addr), getPort(uploadSock->addr), uploadSock->connfd);
+			
+			DivideFileInfo divideFileInfo;
+			
+			divideFileInfo.path=tok[3];
+			divideFileInfo.clientSock=*uploadSock;
+			divideFileInfo.idx=atoi(tok[4].c_str());
+			divideFileInfo.totalParts=atoi(tok[5].c_str());
+			cout<<"download: "<<tok[3]<<endl;
+			
+			pthread_create(&tid, NULL, &sendDivideFile, (void *)&divideFileInfo);
+
+			puts("pthread_create");
+			// free(uploadSock);
+			continue;
+		}
 		// Tell
 		if(me.state==Tell){
 			if(strcmp(recvline, EXIT)==0){
@@ -258,7 +424,7 @@ void str_cli(int connfd, sockaddr_in servaddr) {
 			TCPconnect(clientSock->connfd, clientSock->addr, tok[1].c_str(), atoi(tok[2].c_str()));
 			printf("after IP %s port %d\n", getIP(clientSock->addr), getPort(clientSock->addr));
 			system("clear");
-			
+			puts("type [EXIT] when you finish");
 			continue;
 		}
 		*clientSock=tmpClientSock;
@@ -275,7 +441,7 @@ void str_cli(int connfd, sockaddr_in servaddr) {
 		puts(recvline);
 		
 		
-		recv=recvline;
+		// recv=recvline;
 		// someone tells
 		
 		if(me.state==Init){
@@ -329,10 +495,56 @@ void str_cli(int connfd, sockaddr_in servaddr) {
 			// upload download
 			else if(tok[0]=="D"){// download
 				if(strcmp(recvline, SUCCESS)==0){
+					write(connfd, SUCCESS, strlen(SUCCESS));
+					system("mkdir tmp");// tmp folder
+
+					receive(connfd, recvline);
+					int numFile=atoi(recvline);
+					// set TCP connection(write)
+					int port=getRandPort();
+					printf("open port = %d\n", port);
+					struct sockaddr_in servaddr;
+					int listenid, sockfd;
+					TCPlisten(listenid, sockfd, servaddr, port);
+					
+					string str=toString(port);
+					writeRecv(clientSock->connfd, str.c_str(), str.length());
+
+					printf("numFile(owners) = %d\n", numFile);
+					pthread_t *tid=(pthread_t*)malloc(sizeof(pthread_t)*numFile);
+					ClientSock * downloadSock=(ClientSock*)malloc(sizeof(ClientSock)*numFile);
+					DivideFileInfo *divideFileInfo=(DivideFileInfo*)malloc(sizeof(DivideFileInfo)*numFile);
+					for(int i=0;i<numFile;i++){
+						
+						puts("listening ~");
+						socklen_t clilen = sizeof(downloadSock[i].addr);
+						downloadSock[i].connfd= accept(listenid, (struct sockaddr*)&(downloadSock[i].addr), &clilen);
+						divideFileInfo[i].clientSock=downloadSock[i];
+						printf("TCP connect from IP %s (port %d), connfd = %d\n", getIP(divideFileInfo[i].clientSock.addr), getPort(divideFileInfo[i].clientSock.addr), divideFileInfo[i].clientSock.connfd);
+						//send file
+						divideFileInfo[i].path=tok[1];
+						
+
+						pthread_create(&tid[i], NULL, &downloadDivideFile, (void *)&divideFileInfo[i]);
+						printf("pthread create [%d]\n", i);
+					}
+
+					for(int i=0;i<numFile;i++){
+						printf("pthread join [%d]\n", i);
+						pthread_join(tid[i], NULL);
+					}
+					// free(divideFileInfo);
+					// merge?
+					cout<<"merge "<<tok[1]<<endl;
+					mergeDivideFile(tok[1], numFile);
+
+
 					// puts(recvline);
 					// downloadFile(tok[1], fp, sockfd, pservaddr, servlen);
 					// receiveArticle(fp, sockfd, pservaddr, servlen);
 					// recvline[0]='\0';
+					system("clear");
+					showMsg();
 				}
 			}
 			else if(tok[0]=="U"){// upload
@@ -359,7 +571,7 @@ void str_cli(int connfd, sockaddr_in servaddr) {
 					sendFileInfo.path=tok[2];
 					sendFileInfo.clientSock=*uploadSock;
 					pthread_create(&tid, NULL, &sendFile, (void *)&sendFileInfo);
-					// system("clear");
+					system("clear");
 				}
 			}
 			//------------------------------------------------
@@ -384,6 +596,7 @@ void str_cli(int connfd, sockaddr_in servaddr) {
 					clientSock->connfd = accept(listenid, (struct sockaddr*)&(clientSock->addr), &clilen);
 					printf("TCP connect from IP %s (port %d)\n", getIP(clientSock->addr), getPort(clientSock->addr));
 					system("clear");
+					puts("type [EXIT] when you finish");
 					// create a thread to read?
 					
 					// close(clientSock->connfd);
@@ -401,7 +614,8 @@ void str_cli(int connfd, sockaddr_in servaddr) {
 		
 
 	}
-	close(clientSock->connfd);
+	shutdown(clientSock->connfd, SHUT_WR);
+	// close(clientSock->connfd);
 }
 
 int main(int argc, char **argv) {

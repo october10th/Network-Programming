@@ -124,6 +124,28 @@ void deleteFile(string ID){
 	sql_exec(sql);
 	showResult();
 }
+int existNumFile(string path){
+	string sql="SELECT * FROM filelist WHERE path='"+path+"';";
+	cout<<sql<<endl;
+	sql_exec(sql);
+	if(result.size()){
+		showResult();
+		return result.size();
+	}
+	return 0;
+}
+vector<string>getFileAuthor(){
+	vector<string>author;
+	author.clear();
+	for(int i=0;i<result.size();i++){
+		for (std::map<string, string>::iterator it=result[i].begin(); it!=result[i].end(); ++it){
+			if(it->first=="author"){
+				author.push_back(it->second);
+			}
+		}
+	}
+	return author;
+}
 void initServerFilelist(){
 	vector<string>filelist=getCurFilelist();
 	for(int i=0;i<filelist.size();i++){
@@ -346,13 +368,47 @@ void *run(void *arg){
 				//------------------------------------------------
 				// upload download
 				else if(tok[0]=="D"){// download
+					writeRecv(connfd, recvline, strlen(recvline));// send to client
+					int numFile=existNumFile(tok[1]);
+					printf("number of file = %d\n", numFile);
 					
-					// update filelist
+					// total authors
+					if(numFile){
+						vector<string>author=getFileAuthor();
+						writeRecv(connfd, SUCCESS, strlen(SUCCESS));
+						string str=toString((int)author.size());
+						// how many author
+						write(connfd, str.c_str(), str.length());
+						// to user A
+						recvWrite(connfd, recvline);// tell B connect to "port"
+						// to user A
+						User userA=accountUser[currentUser];
+						for(int i=0;i<author.size();i++){
+							cout<<author[i]<<endl;
+
+							
+							User userB=accountUser[Account(author[i])];
+							
+							// user B
+							str=string(DOWNLOAD)+" "+userA.IP+" "+recvline+" "+tok[1]+" "+toString(i)+" "+toString((int)author.size());
+							write(userB.connfd, str.c_str(), str.length());// tell B :(A's) IP port path idx total
+
+						}
+
+						// update filelist
+						puts("update filelist");
+						addFile(currentUser.ID, tok[1]);
+					}
+					else{
+						write(connfd, FAIL, strlen(FAIL));
+					}
+					
+
+
 				}
 				else if(tok[0]=="U"){// upload
 					writeRecv(connfd, recvline, strlen(recvline));// send to client
 					if(accountUser.find(Account(tok[1]))!=accountUser.end()){
-						userAccount[User(getIP(cliaddr), getPort(cliaddr), cliaddr, connfd)]=currentUser;
 						// to user A
 						write(connfd, SUCCESS, strlen(SUCCESS));
 						User userA=accountUser[currentUser];
@@ -365,7 +421,7 @@ void *run(void *arg){
 						write(userB.connfd, str.c_str(), str.length());// tell B :(A's) IP port
 
 						// update B's filelist
-
+						addFile(tok[1], tok[2]);
 					}
 					else{
 						write(connfd, FAIL, strlen(FAIL));
