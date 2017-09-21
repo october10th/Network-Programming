@@ -1,6 +1,6 @@
-# Network-Programming
+# Network Programming
 
-Ugly codes for the course Network Programming.
+Ugly C/C++ codes for the course Network Programming.
 
 Some bugs remain.
 
